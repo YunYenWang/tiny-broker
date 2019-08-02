@@ -54,16 +54,16 @@ import com.cht.iot.mqtt.protocol.UnsubscribePacket;
 
 public class MyBrokerImpl implements MyBroker {
 	static final Logger LOG = LoggerFactory.getLogger(MyBrokerImpl.class);
-
-	static final int EXECUTOR_CORE_POOL_SIZE = 1;
-	static final int EXECUTOR_MAX_POOL_SIZE = 10;
-	static final int EXECUTOR_KEEPALIVE_TIME = 60; // 1 minute
+	
+	int executorCorePoolSize = 100;
+	int executorMaxPoolSize = 1000;
+	int executorKeepAliveTime = 60;
 	
 	int port = 1883;
 	IoAcceptor acceptor;
 	int eventQueueThrottle = 8192;
 	
-	int timeout = 300; // idle timeout in seconds
+	int timeout = 90; // idle timeout in seconds
 	int packetBufferInitialSize = 1000;
 	
 	Listener listener = new Listener() {
@@ -85,9 +85,20 @@ public class MyBrokerImpl implements MyBroker {
 	};
 	
 	Map<String, TopicRoom> rooms = Collections.synchronizedMap(new HashMap<String, TopicRoom>());
-	ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(EXECUTOR_MAX_POOL_SIZE);
 	
 	public MyBrokerImpl() {	
+	}
+	
+	public void setExecutorCorePoolSize(int executorCorePoolSize) {
+		this.executorCorePoolSize = executorCorePoolSize;
+	}
+	
+	public void setExecutorMaxPoolSize(int executorMaxPoolSize) {
+		this.executorMaxPoolSize = executorMaxPoolSize;
+	}
+	
+	public void setExecutorKeepAliveTime(int executorKeepAliveTime) {
+		this.executorKeepAliveTime = executorKeepAliveTime;
 	}
 	
 	/**
@@ -142,10 +153,9 @@ public class MyBrokerImpl implements MyBroker {
 		
 		acceptor.getFilterChain().addLast("executor",
 				new ExecutorFilter(
-						EXECUTOR_CORE_POOL_SIZE,
-						EXECUTOR_MAX_POOL_SIZE,
-						EXECUTOR_KEEPALIVE_TIME,
-						TimeUnit.SECONDS, 
+						executorCorePoolSize,
+						executorMaxPoolSize,
+						executorKeepAliveTime, TimeUnit.SECONDS, 
 						new IoEventQueueThrottle(eventQueueThrottle)));
 		
 		acceptor.getFilterChain().addLast("mqtt", filter);
@@ -159,9 +169,7 @@ public class MyBrokerImpl implements MyBroker {
 	}
 	
 	@PreDestroy
-	public void stop() {
-		scheduler.shutdown();
-		
+	public void stop() {		
 		LOG.info("Shutdown the MQTT broker");
 		
 		for (IoSession s : acceptor.getManagedSessions().values()) {
@@ -442,7 +450,7 @@ public class MyBrokerImpl implements MyBroker {
 			
 			Client client = register(session); // every session must has 'from' and 'client'
 			
-			LOG.info("MQTT is connected - {}", client.getConnection());
+			LOG.info("MQTT is connected - {}, total sessions: {}", client.getConnection(), acceptor.getManagedSessionCount());
 		}
 		
 		@Override
