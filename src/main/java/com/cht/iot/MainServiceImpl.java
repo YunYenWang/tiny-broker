@@ -24,8 +24,11 @@ public class MainServiceImpl {
 	@Value("${broker.executor-max-pool-size:1000}")
 	int executorMaxPoolSize;
 	
+	@Value("${broker.session-authentication-timeout-in-seconds:5}")
+	int authenticationTimeout;
+	
 	@Value("${broker.session-idle-timeout-in-seconds:90}")
-	int timeout;
+	int idleTimeout;
 	
 	MyBrokerImpl broker;
 	
@@ -42,14 +45,15 @@ public class MainServiceImpl {
 		broker = new MyBrokerImpl();
 		broker.setExecutorCorePoolSize(executorCorePoolSize);
 		broker.setExecutorMaxPoolSize(executorMaxPoolSize);
-		broker.setIdleTimeout(timeout);
+		broker.setAuthenticationTimeout(authenticationTimeout);
+		broker.setIdleTimeout(idleTimeout);
 		
 		if (listener != null) {
 			LOG.info("Set Listener - {}", listener);			
 			broker.setListener(listener);
 		}
 		
-		LOG.info("ExecutorCorePoolSize: {}, ExecutorMaxPoolSize: {}, IdleTimeout: {}s", executorCorePoolSize, executorMaxPoolSize, timeout);
+		LOG.info("ExecutorCorePoolSize: {}, ExecutorMaxPoolSize: {}, IdleTimeout: {}s", executorCorePoolSize, executorMaxPoolSize, idleTimeout);
 		
 		broker.start();
 	}

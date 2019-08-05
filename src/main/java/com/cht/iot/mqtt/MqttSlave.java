@@ -102,7 +102,7 @@ public class MqttSlave {
 	@Override
 	public String toString() {			
 		return String.format("account: %s, clientId: %s, from: %s",
-				(account != null)? account.getUsername() : "",
+				((account != null) && (account.getUsername() != null))? account.getUsername() : "",
 				(clientId != null)? clientId : "",
 				connection);
 	}

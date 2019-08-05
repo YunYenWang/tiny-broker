@@ -5,6 +5,7 @@ import java.lang.ref.WeakReference;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Iterator;
@@ -64,7 +65,8 @@ public class MyBrokerImpl implements MyBroker {
 	IoAcceptor acceptor;
 	int eventQueueThrottle = 8192;
 	
-	int timeout = 90; // idle timeout in seconds
+	int authenticationTimeout = 5; // login timeout in seconds
+	int idleTimeout = 90; // idle timeout in seconds
 	int packetBufferInitialSize = 1000;
 	
 	Listener listener = new Listener() {
@@ -88,6 +90,8 @@ public class MyBrokerImpl implements MyBroker {
 	Map<String, TopicRoom> rooms = Collections.synchronizedMap(new HashMap<String, TopicRoom>());
 	
 	OrderedThreadPoolExecutor executor;
+	
+	ScheduledExecutorService scheduler;
 	
 	public MyBrokerImpl() {	
 	}
@@ -123,12 +127,21 @@ public class MyBrokerImpl implements MyBroker {
 	}
 	
 	/**
-	 * Set session idle timeout. Default is 5 minutes.
+	 * Set authentication timeout in seconds. default is 5 seconds
+	 * 
+	 * @param authenticationTimeout
+	 */
+	public void setAuthenticationTimeout(int authenticationTimeout) {
+		this.authenticationTimeout = authenticationTimeout;
+	}
+	
+	/**
+	 * Set session idle timeout in seconds. default is 90 seconds
 	 * 
 	 * @param timeout
 	 */
-	public void setIdleTimeout(int timeout) {
-		this.timeout = timeout;
+	public void setIdleTimeout(int idleTimeout) {
+		this.idleTimeout = idleTimeout;
 	}
 	
 	/**
@@ -149,7 +162,6 @@ public class MyBrokerImpl implements MyBroker {
 	@PostConstruct
 	public void start() throws IOException, GeneralSecurityException {
 		acceptor = new NioSocketAcceptor(); // Mina Server		
-		acceptor.getSessionConfig().setIdleTime(IdleStatus.BOTH_IDLE, timeout);
 
 		executor = new OrderedThreadPoolExecutor(
 				executorCorePoolSize,
@@ -169,10 +181,18 @@ public class MyBrokerImpl implements MyBroker {
 		acceptor.bind(new InetSocketAddress(port));
 		
 		LOG.info("Listens at {}", port);
+		
+		scheduler = Executors.newSingleThreadScheduledExecutor();
+		scheduler.scheduleWithFixedDelay(() -> {
+			doClean();
+			
+		}, idleTimeout, idleTimeout, TimeUnit.SECONDS);
 	}
 	
 	@PreDestroy
 	public void stop() {		
+		scheduler.shutdown();
+		
 		LOG.info("Shutdown the broker");
 		
 		for (IoSession s : acceptor.getManagedSessions().values()) {
@@ -218,6 +238,46 @@ public class MyBrokerImpl implements MyBroker {
 		listener.onSlaveExited(slave);
 		
 		return slave;
+	}
+	
+	// ======
+	
+	/**
+	 * Remove the useless TopicRoom
+	 */
+	void doClean() {
+		try {
+			List<String> topics = new ArrayList<>();			
+			synchronized (rooms) { // don't lock rooms
+				topics.addAll(rooms.keySet());
+			}
+			
+			for (String topic : topics) {
+				TopicRoom room = rooms.get(topic);
+				if (room == null) {
+					continue;
+				}
+				
+				List<WeakReference<IoSession>> subscribers = room.getSubscribers();
+				synchronized (subscribers) { // for each subscriber
+					Iterator<WeakReference<IoSession>> it = subscribers.iterator();
+					while (it.hasNext()) {
+						IoSession session = it.next().get();
+						if (SessionUtils.isClosed(session)){
+							it.remove();							
+						}					
+					}
+					
+					if (subscribers.isEmpty()) {
+						LOG.info("Remove the empty topic - {}", topic);
+						rooms.remove(topic);
+					}
+				}
+			}
+			
+		} catch (Throwable t) {
+			LOG.error("Failed to clean", t);
+		}
 	}
 	
 	// ======
@@ -281,7 +341,6 @@ public class MyBrokerImpl implements MyBroker {
 				while (it.hasNext()) {
 					IoSession session = it.next().get();
 					if (SessionUtils.isClosed(session)){
-						LOG.warn("Remove session from topic '{}'", topic);
 						it.remove();
 						
 					} else {						
@@ -313,16 +372,16 @@ public class MyBrokerImpl implements MyBroker {
 	
 	void unsubscribe(String topic, IoSession subscriber) throws IOException {
 		TopicRoom room = rooms.get(topic);
-		
-		List<WeakReference<IoSession>> subscribers = room.getSubscribers();
-		synchronized (subscribers) {
-			Iterator<WeakReference<IoSession>> it = subscribers.iterator();
-			while (it.hasNext()) {
-				IoSession session = it.next().get();
-				if (SessionUtils.isClosed(session) || (session == subscriber)) {
-					LOG.warn("Remove session from topic '{}'", topic);
-					it.remove();					
-				}					
+		if (room != null) {		
+			List<WeakReference<IoSession>> subscribers = room.getSubscribers();
+			synchronized (subscribers) {
+				Iterator<WeakReference<IoSession>> it = subscribers.iterator();
+				while (it.hasNext()) {
+					IoSession session = it.next().get();
+					if (SessionUtils.isClosed(session) || (session == subscriber)) {
+						it.remove();					
+					}					
+				}
 			}
 		}
 	}
@@ -388,6 +447,10 @@ public class MyBrokerImpl implements MyBroker {
 					throw new PermissionException();
 				}
 				
+				// assign the reasonable timeout now
+				session.getConfig().setReaderIdleTime(idleTimeout); 
+				session.getConfig().setWriterIdleTime(idleTimeout);
+				
 				ConnackPacket res = new ConnackPacket();
 				res.setSessionPresent(false);
 				res.setReturnCode(ConnackPacket.ReturnCode.ACCEPTED);
@@ -446,14 +509,19 @@ public class MyBrokerImpl implements MyBroker {
 			SessionUtils.setup(session);
 			
 			SocketSessionConfig cfg = (SocketSessionConfig) session.getConfig();
-			cfg.setSoLinger(0); // avoid TIME_WAIT problem
+			cfg.setReaderIdleTime(authenticationTimeout);
+			cfg.setSoLinger(0); // avoid TIME_WAIT problem			
 			
 			MqttSlave slave = register(session); // every session must has 'from' and 'slave'
 			
-			LOG.info("Connected - {}, sessions: {}, core: {}, active: {}", slave.getConnection(),
+			LOG.info("Connected - {}", slave.getConnection());
+			LOG.info(String.format("sessions: %,d, topics: %,d, core: %,d, active: %,d, free: %,d bytes",
 					acceptor.getManagedSessionCount(),
+					rooms.size(),
 					executor.getCorePoolSize(),
-					executor.getActiveCount());
+					executor.getActiveCount(),
+					Runtime.getRuntime().freeMemory()
+					));
 		}
 		
 		@Override
