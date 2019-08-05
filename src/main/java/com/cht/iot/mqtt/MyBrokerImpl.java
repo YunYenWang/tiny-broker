@@ -168,12 +168,12 @@ public class MyBrokerImpl implements MyBroker {
 		
 		acceptor.bind(new InetSocketAddress(port));
 		
-		LOG.info("MQTT listens at {}", port);
+		LOG.info("Listens at {}", port);
 	}
 	
 	@PreDestroy
 	public void stop() {		
-		LOG.info("Shutdown the MQTT broker");
+		LOG.info("Shutdown the broker");
 		
 		for (IoSession s : acceptor.getManagedSessions().values()) {
 			s.closeNow();
@@ -188,25 +188,22 @@ public class MyBrokerImpl implements MyBroker {
 	// ======
 	
 	/**
-	 * Assign a 'Client' into the connected session.
+	 * Assign a 'Slave' into the connected session.
 	 * 
 	 * @param session
 	 * @return
 	 */
-	Client register(IoSession session) {
-		Client client = new Client(session, packetBufferInitialSize);
-		session.setAttribute("client", client);
-		
-		MqttSlave slave = new MqttSlave(session);
+	MqttSlave register(IoSession session) {
+		MqttSlave slave = new MqttSlave(session, packetBufferInitialSize);
 		session.setAttribute("slave", slave);
 		
-//		listener.onSlaveArrived(slave);
+		listener.onSlaveArrived(slave);
 		
-		return client;
+		return slave;
 	}
 	
-	Client getClient(IoSession session) {
-		return (Client) session.getAttribute("client");
+	MqttSlave getSlave(IoSession session) {
+		return (MqttSlave) session.getAttribute("slave");
 	}
 	
 	/**
@@ -215,12 +212,12 @@ public class MyBrokerImpl implements MyBroker {
 	 * @param session
 	 * @return
 	 */
-	Client unregister(IoSession session) {
-		MqttSlave slave = (MqttSlave) session.getAttribute("slave");
+	MqttSlave unregister(IoSession session) {
+		MqttSlave slave = getSlave(session);
 		
 		listener.onSlaveExited(slave);
 		
-		return getClient(session);
+		return slave;
 	}
 	
 	// ======
@@ -249,20 +246,17 @@ public class MyBrokerImpl implements MyBroker {
 	
 	void write(final IoSession session, final ByteBuffer[] buffers) {
 		try {
-			synchronized (session) { // TODO - 'synchronized (getClient(session))' should be better					
-				for (ByteBuffer buffer : buffers) {							
-					session.write(buffer.slice()); // send the message
-				}
+			for (ByteBuffer buffer : buffers) {							
+				session.write(buffer.slice()); // send the message
 			}
+			
 		} catch (Exception e) {
-			LOG.error("Failed to send message to " + MyUtils.toString(session), e);
+			LOG.error("Failed to send message to " + SessionUtils.toString(session), e);
 		}
 	}
 	
 	void write(final IoSession session, final ByteBuffer buffer) {
-		synchronized (session) { // TODO - 'synchronized (getClient(session))' should be better
-			session.write(buffer);
-		}
+		session.write(buffer);
 	}
 	
 	/**
@@ -286,7 +280,7 @@ public class MyBrokerImpl implements MyBroker {
 				Iterator<WeakReference<IoSession>> it = subscribers.iterator();
 				while (it.hasNext()) {
 					IoSession session = it.next().get();
-					if (MyUtils.isClosed(session)){
+					if (SessionUtils.isClosed(session)){
 						LOG.warn("Remove session from topic '{}'", topic);
 						it.remove();
 						
@@ -325,7 +319,7 @@ public class MyBrokerImpl implements MyBroker {
 			Iterator<WeakReference<IoSession>> it = subscribers.iterator();
 			while (it.hasNext()) {
 				IoSession session = it.next().get();
-				if (MyUtils.isClosed(session) || (session == subscriber)) {
+				if (SessionUtils.isClosed(session) || (session == subscriber)) {
 					LOG.warn("Remove session from topic '{}'", topic);
 					it.remove();					
 				}					
@@ -337,16 +331,19 @@ public class MyBrokerImpl implements MyBroker {
 	
 	// receive the packets from client side
 	void handle(IoSession session, ByteBuffer bytes) throws IOException, InterruptedException {
-		Client client = getClient(session);		
-		PacketBuilder builder = client.getPacketBuilder();
+		MqttSlave slave = getSlave(session);
+		if (slave == null) {
+			LOG.error("Failed to get MqttSlave from - {}", SessionUtils.toString(session));			
+			return;
+		}		
+		
+		PacketBuilder builder = slave.getPacketBuilder();
 		List<Packet> packets = builder.build(bytes);
-		handle(session, client, packets);
+		handle(session, slave, packets);
 	}
 	
 	// handle the MQTT packets
-	void handle(IoSession session, Client client, List<Packet> packets) throws IOException, InterruptedException {
-		MqttSlave slave = (MqttSlave) session.getAttribute("slave");
-		
+	void handle(IoSession session, MqttSlave slave, List<Packet> packets) throws IOException, InterruptedException {
 		for (Packet pkt : packets) {
 			if (pkt instanceof PublishPacket) { // publish (memory leak)
 				PublishPacket req = (PublishPacket) pkt;
@@ -379,8 +376,8 @@ public class MyBrokerImpl implements MyBroker {
 				ConnectPacket req = (ConnectPacket) pkt;
 				
 				Account account = new Account(req.getUsername(), req.getPassword());
-				client.setAccount(account);
-				client.setClientId(req.getClientId());
+				slave.setAccount(account);
+				slave.setClientId(req.getClientId());
 				
 				if (!listener.challenge(slave, req.getUsername(), req.getPassword())) { // no accepted
 					ConnackPacket res = new ConnackPacket();
@@ -396,8 +393,6 @@ public class MyBrokerImpl implements MyBroker {
 				res.setReturnCode(ConnackPacket.ReturnCode.ACCEPTED);
 				
 				write(session, res.getByteBuffer());
-				
-				slave.setId(account.getUsername());	// IMPORTANT: username is deviceId also
 				
 				listener.onSlaveArrived(slave); // HINT - could throw the PermissionException here
 					
@@ -448,14 +443,14 @@ public class MyBrokerImpl implements MyBroker {
 		
 		@Override
 		public void sessionOpened(IoSession session) throws Exception {
+			SessionUtils.setup(session);
+			
 			SocketSessionConfig cfg = (SocketSessionConfig) session.getConfig();
 			cfg.setSoLinger(0); // avoid TIME_WAIT problem
 			
-			MyUtils.setup(session);			
+			MqttSlave slave = register(session); // every session must has 'from' and 'slave'
 			
-			Client client = register(session); // every session must has 'from' and 'client'
-			
-			LOG.info("MQTT is connected - {}, sessions: {}, core: {}, active: {}", client.getConnection(),
+			LOG.info("Connected - {}, sessions: {}, core: {}, active: {}", slave.getConnection(),
 					acceptor.getManagedSessionCount(),
 					executor.getCorePoolSize(),
 					executor.getActiveCount());
@@ -468,35 +463,35 @@ public class MyBrokerImpl implements MyBroker {
 				handle(session, bytes);				
 				
 			} catch (IllegalProtocolException e) {
-				LOG.error("Unsupported MQTT packet is from - " + getClient(session), e);
+				LOG.error("Unsupported MQTT packet is from - " + getSlave(session), e);
 				
 			} catch (PermissionException e) {
-				LOG.error("Permission denied", e);
+				LOG.error("Permission denied from - " + getSlave(session));
 				
-				session.closeOnFlush();
+				session.closeNow();
 				
 			} catch (Exception e) {
-				LOG.error("Failed to handle the MQTT packet from - " + getClient(session), e);
+				LOG.error("Failed to handle the MQTT packet from - " + getSlave(session), e);
 			}					
 		}
 		
 		@Override
 		public void sessionIdle(final IoSession session, IdleStatus status) throws Exception {
-			LOG.info("MQTT connection is idle - {}", getClient(session));
+			LOG.info("Idle - {}", getSlave(session));
 			
 			session.closeNow();
 		}
 		
 		@Override
 		public void exceptionCaught(final IoSession session, final Throwable cause) throws Exception {
-			LOG.error("[{}] {} - {}", getClient(session), cause.getClass().getSimpleName(), cause.getMessage());
+			LOG.error("[{}] {} - {}", getSlave(session), cause.getClass().getSimpleName(), cause.getMessage());
 			
 			session.closeNow();
 		}
 		
 		@Override
 		public void sessionClosed(final IoSession session) throws Exception {
-			LOG.info("MQTT is disconnected - {}", getClient(session));	// session will be recycled by Mina Server, remove it from memory during 'dispatch()'
+			LOG.info("Disconnected - {}", getSlave(session));	// session will be recycled by Mina Server, remove it from memory during 'dispatch()'
 			
 			unregister(session);
 		}

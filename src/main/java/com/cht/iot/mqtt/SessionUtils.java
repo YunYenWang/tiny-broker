@@ -4,8 +4,8 @@ import java.net.InetSocketAddress;
 
 import org.apache.mina.core.session.IoSession;
 
-public class MyUtils {
-	
+public class SessionUtils {
+		
 	public static final IoSession setup(IoSession session) {
 		InetSocketAddress isa = (InetSocketAddress) session.getRemoteAddress();
 		if (isa != null) {
@@ -14,15 +14,6 @@ public class MyUtils {
 		}
 		
 		return session;
-	}
-	
-	public static final String getHostAddress(IoSession session) {
-		InetSocketAddress isa = (InetSocketAddress) session.getRemoteAddress();
-		if (isa != null) {
-			return isa.getAddress().getHostAddress();
-		}
-		
-		return "";
 	}
 	
 	public static final String toString(IoSession session) {

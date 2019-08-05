@@ -9,31 +9,31 @@ import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.mina.core.session.IoSession;
 
+import com.cht.iot.mqtt.protocol.PacketBuilder;
+
 public class MqttSlave {
 	final String uid; // session id
 	final IoSession session;
 	final String connection;
 	final long birthday;
 	
-	String id = "";
+	Account account;
+	String clientId;
+	
+	final PacketBuilder builder;
 	
 	Map<String, Object> attributes = new HashMap<String, Object>(); 
 	
-	// fair lock
-//	ReentrantLock lock = new ReentrantLock(true);
-	// fairness lock
-	ReentrantLock lock = new ReentrantLock();
 	BlockingQueue<Payload> payloads = new LinkedBlockingQueue<Payload>();
 	
-	public MqttSlave(IoSession session) {
-		this.uid = String.format("slave-%d", session.getId());		
-		this.session = session;			
-		this.connection = toString(session);
-		this.birthday = System.currentTimeMillis();
-	}
-	
-	public String getUid() {
-		return uid;
+	public MqttSlave(IoSession session, int packetBufferInitialSize) {
+		this.session = session;
+		
+		uid = String.format("slave-%d", session.getId());
+		connection = SessionUtils.toString(session);
+		birthday = System.currentTimeMillis();
+		
+		builder = new PacketBuilder(packetBufferInitialSize);
 	}
 	
 	public IoSession getSession() {
@@ -48,12 +48,24 @@ public class MqttSlave {
 		return birthday;
 	}
 	
-	public String getId() {
-		return id;
+	public Account getAccount() {
+		return account;
 	}
 	
-	public void setId(String id) {
-		this.id = id;
+	public void setAccount(Account account) {
+		this.account = account;
+	}
+	
+	public String getClientId() {
+		return clientId;
+	}
+	
+	public void setClientId(String clientId) {
+		this.clientId = clientId;
+	}
+	
+	public PacketBuilder getPacketBuilder() {
+		return builder;
 	}
 	
 	public void putAttribute(String key, Object o) {
@@ -65,10 +77,6 @@ public class MqttSlave {
 		return (T) attributes.get(key);
 	}
 	
-	public ReentrantLock getLock() {
-		return lock;
-	}
-	
 	public BlockingQueue<Payload> getPayloads() {
 		return payloads;
 	}
@@ -77,18 +85,8 @@ public class MqttSlave {
 		session.closeOnFlush();
 	}
 	
-	public synchronized void write(byte[] bytes) {
+	public void write(byte[] bytes) {
 		session.write(ByteBuffer.wrap(bytes));
-	}
-	
-	public static final String toString(IoSession session) {
-		String from = (String) session.getAttribute("from");
-		if (from != null) {
-			return from;
-			
-		} else {
-			return session.toString();
-		}		
 	}
 	
 	@Override
@@ -103,7 +101,10 @@ public class MqttSlave {
 	
 	@Override
 	public String toString() {			
-		return String.format("[%s] %s", id, connection);
+		return String.format("account: %s, clientId: %s, from: %s",
+				(account != null)? account.getUsername() : "",
+				(clientId != null)? clientId : "",
+				connection);
 	}
 	
 	public static class Payload {
