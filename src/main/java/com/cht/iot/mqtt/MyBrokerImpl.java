@@ -31,6 +31,7 @@ import org.apache.mina.filter.codec.ProtocolEncoder;
 import org.apache.mina.filter.codec.ProtocolEncoderOutput;
 import org.apache.mina.filter.executor.ExecutorFilter;
 import org.apache.mina.filter.executor.IoEventQueueThrottle;
+import org.apache.mina.filter.executor.OrderedThreadPoolExecutor;
 import org.apache.mina.transport.socket.SocketSessionConfig;
 import org.apache.mina.transport.socket.nio.NioSocketAcceptor;
 import org.slf4j.Logger;
@@ -85,6 +86,8 @@ public class MyBrokerImpl implements MyBroker {
 	};
 	
 	Map<String, TopicRoom> rooms = Collections.synchronizedMap(new HashMap<String, TopicRoom>());
+	
+	OrderedThreadPoolExecutor executor;
 	
 	public MyBrokerImpl() {	
 	}
@@ -147,17 +150,17 @@ public class MyBrokerImpl implements MyBroker {
 	public void start() throws IOException, GeneralSecurityException {
 		acceptor = new NioSocketAcceptor(); // Mina Server		
 		acceptor.getSessionConfig().setIdleTime(IdleStatus.BOTH_IDLE, timeout);
+
+		executor = new OrderedThreadPoolExecutor(
+				executorCorePoolSize,
+				executorMaxPoolSize,
+				executorKeepAliveTime, TimeUnit.SECONDS,
+				Executors.defaultThreadFactory(), new IoEventQueueThrottle(eventQueueThrottle));
+		
+		acceptor.getFilterChain().addLast("executor", new ExecutorFilter(executor));
 		
 		ProtocolCodecFactory pcf = new CodecFactory();
-		ProtocolCodecFilter filter = new ProtocolCodecFilter(pcf);		
-		
-		acceptor.getFilterChain().addLast("executor",
-				new ExecutorFilter(
-						executorCorePoolSize,
-						executorMaxPoolSize,
-						executorKeepAliveTime, TimeUnit.SECONDS, 
-						new IoEventQueueThrottle(eventQueueThrottle)));
-		
+		ProtocolCodecFilter filter = new ProtocolCodecFilter(pcf);
 		acceptor.getFilterChain().addLast("mqtt", filter);
 		
 		IoHandler handler = new ServerHandler();		
@@ -178,6 +181,8 @@ public class MyBrokerImpl implements MyBroker {
 		
 		acceptor.unbind();		
 		acceptor.dispose();
+		
+		executor.shutdown();
 	}
 		
 	// ======
@@ -450,7 +455,10 @@ public class MyBrokerImpl implements MyBroker {
 			
 			Client client = register(session); // every session must has 'from' and 'client'
 			
-			LOG.info("MQTT is connected - {}, total sessions: {}", client.getConnection(), acceptor.getManagedSessionCount());
+			LOG.info("MQTT is connected - {}, sessions: {}, core: {}, active: {}", client.getConnection(),
+					acceptor.getManagedSessionCount(),
+					executor.getCorePoolSize(),
+					executor.getActiveCount());
 		}
 		
 		@Override

@@ -6,9 +6,12 @@ import javax.annotation.PreDestroy;
 import org.apache.mina.core.service.IoAcceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
+import com.cht.iot.mqtt.MqttSlave;
+import com.cht.iot.mqtt.MyBroker;
 import com.cht.iot.mqtt.MyBrokerImpl;
 
 @Service
@@ -26,6 +29,9 @@ public class MainServiceImpl {
 	
 	MyBrokerImpl broker;
 	
+	@Autowired(required = false)
+	MyBroker.Listener listener;
+	
 	public MainServiceImpl() {
 	}
 	
@@ -37,6 +43,11 @@ public class MainServiceImpl {
 		broker.setExecutorCorePoolSize(executorCorePoolSize);
 		broker.setExecutorMaxPoolSize(executorMaxPoolSize);
 		broker.setIdleTimeout(timeout);
+		
+		if (listener != null) {
+			LOG.info("Set Listener - {}", listener);			
+			broker.setListener(listener);
+		}
 		
 		LOG.info("ExecutorCorePoolSize: {}, ExecutorMaxPoolSize: {}, IdleTimeout: {}s", executorCorePoolSize, executorMaxPoolSize, timeout);
 		
