@@ -1,15 +1,15 @@
 package com.cht.iot.mqtt;
 
-import java.lang.ref.WeakReference;
 import java.util.ArrayList;
-import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 import org.apache.mina.core.session.IoSession;
 
 public class TopicRoom {
 	final String topic;
-	List<WeakReference<IoSession>> subscribers = Collections.synchronizedList(new ArrayList<WeakReference<IoSession>>());
+	Set<IoSession> subscribers = new HashSet<IoSession>();
 	
 	public TopicRoom(String topic) {
 		this.topic = topic;
@@ -19,12 +19,23 @@ public class TopicRoom {
 		return topic;
 	}
 	
-	public void addSubscriber(IoSession subscriber) {
-		this.subscribers.add(new WeakReference<IoSession>(subscriber));
+	public synchronized void addSubscriber(IoSession subscriber) {
+		subscribers.add(subscriber);
 	}
 	
-	public List<WeakReference<IoSession>> getSubscribers() {
-		return this.subscribers;
+	public synchronized void removeSubscriber(IoSession subscriber) {
+		subscribers.remove(subscriber);
+	}
+	
+	public synchronized List<IoSession> getSubscribers() {
+		List<IoSession> sessions = new ArrayList<>(subscribers.size());
+		sessions.addAll(subscribers);			
+		
+		return sessions;
+	}
+	
+	public synchronized boolean isEmpty() {
+		return subscribers.isEmpty();
 	}
 	
 	@Override

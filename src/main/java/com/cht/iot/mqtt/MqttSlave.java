@@ -1,11 +1,10 @@
 package com.cht.iot.mqtt;
 
 import java.nio.ByteBuffer;
-import java.util.HashMap;
-import java.util.Map;
+import java.util.HashSet;
+import java.util.Set;
 import java.util.concurrent.BlockingQueue;
 import java.util.concurrent.LinkedBlockingQueue;
-import java.util.concurrent.locks.ReentrantLock;
 
 import org.apache.mina.core.session.IoSession;
 
@@ -20,10 +19,9 @@ public class MqttSlave {
 	Account account;
 	String clientId;
 	
-	final PacketBuilder builder;
+	Set<String> topics = new HashSet<>();
 	
-	Map<String, Object> attributes = new HashMap<String, Object>(); 
-	
+	final PacketBuilder builder;	
 	BlockingQueue<Payload> payloads = new LinkedBlockingQueue<Payload>();
 	
 	public MqttSlave(IoSession session, int packetBufferInitialSize) {
@@ -64,22 +62,19 @@ public class MqttSlave {
 		this.clientId = clientId;
 	}
 	
+	public Set<String> getTopics() {
+		return topics;
+	}
+	
+	// ======
+	
 	public PacketBuilder getPacketBuilder() {
 		return builder;
-	}
-	
-	public void putAttribute(String key, Object o) {
-		attributes.put(key, o);
-	}
-	
-	@SuppressWarnings("unchecked")
-	public <T> T getAttribute(String key) {
-		return (T) attributes.get(key);
-	}
+	}	
 	
 	public BlockingQueue<Payload> getPayloads() {
 		return payloads;
-	}
+	}	
 	
 	public void close() {
 		session.closeOnFlush();

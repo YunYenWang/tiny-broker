@@ -1,18 +1,14 @@
 package com.cht.iot.mqtt;
 
 import java.io.IOException;
-import java.lang.ref.WeakReference;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
-import java.util.ArrayList;
 import java.util.Collections;
 import java.util.HashMap;
-import java.util.Iterator;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 
 import javax.annotation.PostConstruct;
@@ -80,8 +76,6 @@ public class MyBrokerImpl implements MyBroker {
 	Map<String, TopicRoom> rooms = Collections.synchronizedMap(new HashMap<String, TopicRoom>());
 	
 	OrderedThreadPoolExecutor executor;
-	
-	ScheduledExecutorService scheduler;
 	
 	public MyBrokerImpl() {	
 	}
@@ -171,18 +165,10 @@ public class MyBrokerImpl implements MyBroker {
 		acceptor.bind(new InetSocketAddress(port));
 		
 		LOG.info("Listens at {}", port);
-		
-		scheduler = Executors.newSingleThreadScheduledExecutor();
-		scheduler.scheduleWithFixedDelay(() -> {
-			doClean();
-			
-		}, idleTimeout, idleTimeout, TimeUnit.SECONDS);
 	}
 	
 	@PreDestroy
 	public void stop() {		
-		scheduler.shutdown();
-		
 		LOG.info("Shutdown the broker");
 		
 		for (IoSession s : acceptor.getManagedSessions().values()) {
@@ -222,55 +208,32 @@ public class MyBrokerImpl implements MyBroker {
 	 * @param session
 	 * @return
 	 */
-	MqttSlave unregister(IoSession session) {
+	void unregister(IoSession session) {
 		MqttSlave slave = getSlave(session);
-		
-		listener.onSlaveExited(slave);
-		
-		return slave;
-	}
-	
-	// ======
-	
-	/**
-	 * Remove the useless TopicRoom
-	 */
-	void doClean() {
-		try {
-			List<String> topics = new ArrayList<>();			
-			synchronized (rooms) { // don't lock rooms
-				topics.addAll(rooms.keySet());
-			}
-			
-			for (String topic : topics) {
+		if (slave != null) {
+			for (String topic : slave.getTopics()) {
 				TopicRoom room = rooms.get(topic);
 				if (room == null) {
 					continue;
 				}
 				
-				List<WeakReference<IoSession>> subscribers = room.getSubscribers();
-				synchronized (subscribers) { // for each subscriber
-					Iterator<WeakReference<IoSession>> it = subscribers.iterator();
-					while (it.hasNext()) {
-						IoSession session = it.next().get();
-						if (SessionUtils.isClosed(session)){
-							it.remove();							
-						}					
-					}
-					
-					if (subscribers.isEmpty()) {
-						LOG.info("Remove the empty topic - {}", topic);
-						rooms.remove(topic);
-					}
-				}
-			}
+				room.removeSubscriber(session);
+				removeEmptyTopicRoom(room);
+			}			
 			
-		} catch (Throwable t) {
-			LOG.error("Failed to clean", t);
-		}
+			listener.onSlaveExited(slave);
+		}		
 	}
 	
 	// ======
+	
+	void removeEmptyTopicRoom(TopicRoom room) {
+		if (room.isEmpty()) {
+			String topic = room.getTopic();				
+			rooms.remove(topic);					
+			LOG.info("Remove the empty topic - {}", topic);
+		}
+	}
 
 	@Override
 	public void publish(String topic, byte[] payload) {
@@ -325,19 +288,11 @@ public class MyBrokerImpl implements MyBroker {
 		
 		TopicRoom room = rooms.get(topic);
 		if (room != null) {
-			List<WeakReference<IoSession>> subscribers = room.getSubscribers();
-			synchronized (subscribers) { // for each subscriber
-				Iterator<WeakReference<IoSession>> it = subscribers.iterator();
-				while (it.hasNext()) {
-					IoSession session = it.next().get();
-					if (SessionUtils.isClosed(session)){
-						it.remove();
-						
-					} else {						
-						write(session, buffers);
-					}					
+			for (IoSession subscriber : room.getSubscribers()) {
+				if (SessionUtils.isClosed(subscriber) == false) {
+					write(subscriber, buffers);
 				}
-			}
+			}			
 		}
 	}
 	
@@ -348,31 +303,29 @@ public class MyBrokerImpl implements MyBroker {
 	 * @param subscriber
 	 * @throws IOException
 	 */
-	void subscribe(String topic, IoSession subscriber) throws IOException {
+	void subscribe(IoSession subscriber, MqttSlave slave, String topic) throws IOException {
+		TopicRoom room;
+		
 		synchronized (rooms) {
-			TopicRoom room = rooms.get(topic);
+			room = rooms.get(topic);
 			if (room == null) {
 				room = new TopicRoom(topic);
 				rooms.put(topic, room);
 			}
-			
-			room.addSubscriber(subscriber); // new subscriber
-		}		
+		}	
+		
+		room.addSubscriber(subscriber); // new subscriber
+		
+		slave.getTopics().add(topic);
 	}
 	
-	void unsubscribe(String topic, IoSession subscriber) throws IOException {
+	void unsubscribe(IoSession subscriber, MqttSlave slave, String topic) throws IOException {
 		TopicRoom room = rooms.get(topic);
-		if (room != null) {		
-			List<WeakReference<IoSession>> subscribers = room.getSubscribers();
-			synchronized (subscribers) {
-				Iterator<WeakReference<IoSession>> it = subscribers.iterator();
-				while (it.hasNext()) {
-					IoSession session = it.next().get();
-					if (SessionUtils.isClosed(session) || (session == subscriber)) {
-						it.remove();					
-					}					
-				}
-			}
+		if (room != null) {			
+			room.removeSubscriber(subscriber);
+			removeEmptyTopicRoom(room);
+			
+			slave.getTopics().remove(topic);
 		}
 	}
 	
@@ -458,7 +411,7 @@ public class MyBrokerImpl implements MyBroker {
 					
 					listener.onSubscribe(slave, tf); // HINT - could throw the PermissionException here
 					
-					subscribe(tf, session);
+					subscribe(session, slave, tf);
 				}
 					
 				SubackPacket res = new SubackPacket();
@@ -470,7 +423,7 @@ public class MyBrokerImpl implements MyBroker {
 				UnsubscribePacket req = (UnsubscribePacket) pkt;
 				
 				for (String tf : req.getTopicFilters()) {
-					unsubscribe(tf, session);
+					unsubscribe(session, slave, tf);
 				}
 				
 				UnsubackPacket res = new UnsubackPacket();
