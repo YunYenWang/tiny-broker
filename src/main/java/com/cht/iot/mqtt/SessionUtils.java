@@ -28,7 +28,7 @@ public class SessionUtils {
 		}		
 	}
 	
-	public static final boolean isClosed(IoSession session) {
-		return (session == null) || (session.getRemoteAddress() == null); // IoSession.isClosing() could be locked
+	public static final boolean isOkay(IoSession session) {
+		return (session != null) && (session.getRemoteAddress() != null); // IoSession.isClosing() could be locked
 	}
 }

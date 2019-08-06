@@ -244,14 +244,14 @@ public class MyBrokerImpl implements MyBroker {
 			}
 			
 			room.removeSubscriber(session);
-			removeEmptyTopicRoom(room);
+			removeTopicRoomIfEmpty(room);
 		}			
 		
 		listener.onSlaveExited(slave);
 	}
 	
-	void removeEmptyTopicRoom(TopicRoom room) {
-		if (room.isEmpty()) { // FIXME - another thread adds a subscriber
+	void removeTopicRoomIfEmpty(TopicRoom room) {
+		if (room.isEmpty()) { // FIXME - another subscriber could be added after this statement
 			String topic = room.getTopic();				
 			rooms.remove(topic);					
 			LOG.info("Remove the empty topic - {}", topic);
@@ -305,8 +305,8 @@ public class MyBrokerImpl implements MyBroker {
 
 			ByteBuffer[] buffers = pkt.getByteBuffers();
 			
-			for (IoSession subscriber : room.getSubscribers()) {
-				if (SessionUtils.isClosed(subscriber) == false) {
+			for (IoSession subscriber : room.getSubscribers()) { // return the WHOLE NEW subscriber list
+				if (SessionUtils.isOkay(subscriber)) {
 					write(subscriber, buffers);
 				}
 			}			
@@ -333,16 +333,24 @@ public class MyBrokerImpl implements MyBroker {
 			}
 		}	
 		
-		room.addSubscriber(subscriber); // new subscriber
+		room.addSubscriber(subscriber); // FIXME - the 'room' could be removed from 'rooms' by other threads
 		
 		slave.getTopics().add(topic);
 	}
 	
+	/**
+	 * Un-register the subscriber.
+	 * 
+	 * @param subscriber
+	 * @param slave
+	 * @param topic
+	 * @throws IOException
+	 */	
 	void unsubscribe(IoSession subscriber, MqttSlave slave, String topic) throws IOException {
 		TopicRoom room = rooms.get(topic);
 		if (room != null) {			
 			room.removeSubscriber(subscriber);
-			removeEmptyTopicRoom(room);
+			removeTopicRoomIfEmpty(room);
 			
 			slave.getTopics().remove(topic);
 		}
@@ -366,7 +374,7 @@ public class MyBrokerImpl implements MyBroker {
 	// handle the MQTT packets
 	void handle(IoSession session, MqttSlave slave, List<Packet> packets) throws IOException, InterruptedException {
 		for (Packet pkt : packets) {
-			if (pkt instanceof PublishPacket) { // publish (memory leak)
+			if (pkt instanceof PublishPacket) { // publish (notice the issue of memory leak)
 				PublishPacket req = (PublishPacket) pkt;
 				
 				String topic = req.getTopic();
@@ -379,7 +387,7 @@ public class MyBrokerImpl implements MyBroker {
 								
 				// build the message again
 				message = req.getMessage();
-				publish(topic, message); // publish the message to local subscribers and other brokers.
+				publish(topic, message); // publish the message to local subscribers
 					
 				int qos = req.getQoS();
 				if (qos > 0) {				
@@ -389,9 +397,9 @@ public class MyBrokerImpl implements MyBroker {
 					write(session, res.getByteBuffer());
 				}				
 				
-			} else if (pkt instanceof PubackPacket) { // QoS 2
+			} else if (pkt instanceof PubackPacket) { // TODO - QoS 2
 				
-			} else if (pkt instanceof PubcompPacket) { // QoS 2								
+			} else if (pkt instanceof PubcompPacket) { // TODO - QoS 2								
 				
 			} else if (pkt instanceof ConnectPacket) { // connect
 				ConnectPacket req = (ConnectPacket) pkt;
@@ -400,7 +408,7 @@ public class MyBrokerImpl implements MyBroker {
 				slave.setAccount(account);
 				slave.setClientId(req.getClientId());
 				
-				if (!listener.challenge(slave, req.getUsername(), req.getPassword())) { // no accepted
+				if (listener.challenge(slave, req.getUsername(), req.getPassword()) == false) { // no accepted
 					ConnackPacket res = new ConnackPacket();
 					res.setSessionPresent(false);
 					res.setReturnCode(ConnackPacket.ReturnCode.UNAUTHENTICATED);					

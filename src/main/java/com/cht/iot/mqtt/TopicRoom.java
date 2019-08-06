@@ -9,7 +9,7 @@ import org.apache.mina.core.session.IoSession;
 
 public class TopicRoom {
 	final String topic;
-	Set<IoSession> subscribers = new HashSet<IoSession>();
+	final Set<IoSession> subscribers = new HashSet<IoSession>();
 	
 	public TopicRoom(String topic) {
 		this.topic = topic;
@@ -31,7 +31,7 @@ public class TopicRoom {
 		List<IoSession> sessions = new ArrayList<>(subscribers.size());
 		sessions.addAll(subscribers);			
 		
-		return sessions;
+		return sessions; // don't lock 'subscribers'
 	}
 	
 	public synchronized boolean isEmpty() {
@@ -39,7 +39,7 @@ public class TopicRoom {
 	}
 	
 	@Override
-	public String toString() {
+	public synchronized String toString() {
 		return String.format("%s : %d", topic, subscribers.size());
 	}
 }
