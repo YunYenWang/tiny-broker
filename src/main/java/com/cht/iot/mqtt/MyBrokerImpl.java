@@ -80,14 +80,29 @@ public class MyBrokerImpl implements MyBroker {
 	public MyBrokerImpl() {	
 	}
 	
+	/**
+	 * How many threads are ready.
+	 * 
+	 * @param executorCorePoolSize
+	 */
 	public void setExecutorCorePoolSize(int executorCorePoolSize) {
 		this.executorCorePoolSize = executorCorePoolSize;
 	}
 	
+	/**
+	 * Maximum number of threads will be created.
+	 * 
+	 * @param executorMaxPoolSize
+	 */
 	public void setExecutorMaxPoolSize(int executorMaxPoolSize) {
 		this.executorMaxPoolSize = executorMaxPoolSize;
 	}
 	
+	/**
+	 * Thread's idle timeout in seconds;
+	 * 
+	 * @param executorKeepAliveTime
+	 */	
 	public void setExecutorKeepAliveTime(int executorKeepAliveTime) {
 		this.executorKeepAliveTime = executorKeepAliveTime;
 	}
@@ -198,6 +213,13 @@ public class MyBrokerImpl implements MyBroker {
 		return slave;
 	}
 	
+	/**
+	 * Get 'Slave' from session.
+	 * 
+	 * @param session
+	 * @return
+	 */
+	
 	MqttSlave getSlave(IoSession session) {
 		return (MqttSlave) session.getAttribute("slave");
 	}
@@ -210,44 +232,39 @@ public class MyBrokerImpl implements MyBroker {
 	 */
 	void unregister(IoSession session) {
 		MqttSlave slave = getSlave(session);
-		if (slave != null) {
-			for (String topic : slave.getTopics()) {
-				TopicRoom room = rooms.get(topic);
-				if (room == null) {
-					continue;
-				}
-				
-				room.removeSubscriber(session);
-				removeEmptyTopicRoom(room);
-			}			
+		if (slave == null) {
+			LOG.error("Failed to get MqttSlave from - {}", SessionUtils.toString(session));			
+			return;
+		}
+		
+		for (String topic : slave.getTopics()) {
+			TopicRoom room = rooms.get(topic);
+			if (room == null) {
+				continue;
+			}
 			
-			listener.onSlaveExited(slave);
-		}		
+			room.removeSubscriber(session);
+			removeEmptyTopicRoom(room);
+		}			
+		
+		listener.onSlaveExited(slave);
 	}
 	
-	// ======
-	
 	void removeEmptyTopicRoom(TopicRoom room) {
-		if (room.isEmpty()) {
+		if (room.isEmpty()) { // FIXME - another thread adds a subscriber
 			String topic = room.getTopic();				
 			rooms.remove(topic);					
 			LOG.info("Remove the empty topic - {}", topic);
 		}
 	}
+	
+	// ======
 
 	@Override
 	public void publish(String topic, byte[] payload) {
 		publish(topic, ByteBuffer.wrap(payload));
 	}
 	
-	/**
-	 * Publish message to local subscribers and other brokers.
-	 * 
-	 * @param topic
-	 * @param message
-	 * @throws IOException
-	 * @throws InterruptedException
-	 */	
 	void publish(final String topic, final ByteBuffer message) {
 		try {
 			dispatch(topic, message); // publish the message to the local subscribers
@@ -280,14 +297,14 @@ public class MyBrokerImpl implements MyBroker {
 	 * @throws IOException
 	 */
 	void dispatch(String topic, ByteBuffer message) throws IOException {
-		PublishPacket pkt = new PublishPacket();
-		pkt.setTopic(topic);
-		pkt.setMessage(message);
-
-		ByteBuffer[] buffers = pkt.getByteBuffers();		
-		
 		TopicRoom room = rooms.get(topic);
 		if (room != null) {
+			PublishPacket pkt = new PublishPacket();
+			pkt.setTopic(topic);
+			pkt.setMessage(message);
+
+			ByteBuffer[] buffers = pkt.getByteBuffers();
+			
 			for (IoSession subscriber : room.getSubscribers()) {
 				if (SessionUtils.isClosed(subscriber) == false) {
 					write(subscriber, buffers);
@@ -295,6 +312,8 @@ public class MyBrokerImpl implements MyBroker {
 			}			
 		}
 	}
+	
+	// ======
 	
 	/**
 	 * Register the new subscriber.
@@ -447,20 +466,8 @@ public class MyBrokerImpl implements MyBroker {
 	
 	class ServerHandler extends IoHandlerAdapter {
 		
-		int count = 0;
-		
-		synchronized void plusCount() {
-			count += 1;
-		}
-		
-		synchronized void minusCount() {
-			count -= 1;
-		}
-		
 		@Override
 		public void sessionOpened(IoSession session) throws Exception {
-			plusCount();
-			
 			if (SessionUtils.setup(session) == false) {
 				LOG.error("Don't accept the broken session");				
 				session.closeNow();
@@ -472,12 +479,20 @@ public class MyBrokerImpl implements MyBroker {
 			cfg.setSoLinger(0); // avoid TIME_WAIT problem			
 			
 			MqttSlave slave = register(session); // every session must has 'from' and 'slave'
+
+			LOG.info(String.format("Connected - %s, sessions: %,d, topics: %,d, active: %,d, free: %,d bytes",
+					slave.getConnection(),
+					acceptor.getManagedSessionCount(),
+					rooms.size(),
+					executor.getActiveCount(),
+					Runtime.getRuntime().freeMemory()
+					));
 			
-			LOG.info("Connected - {}", slave.getConnection());
-			LOG.info(String.format("free: %,d bytes", Runtime.getRuntime().freeMemory()));
-			LOG.info(String.format("topics: %,d", rooms.size()));
-			LOG.info(String.format("active: %,d", executor.getActiveCount()));
-			LOG.info(String.format("sessions: %,d", count));
+//			LOG.info("Connected - {}", slave.getConnection());
+//			LOG.info(String.format("free: %,d bytes", Runtime.getRuntime().freeMemory()));
+//			LOG.info(String.format("topics: %,d", rooms.size()));
+//			LOG.info(String.format("active: %,d", executor.getActiveCount()));
+//			LOG.info(String.format("sessions: %,d", count));
 		}
 		
 		@Override
@@ -515,8 +530,6 @@ public class MyBrokerImpl implements MyBroker {
 		
 		@Override
 		public void sessionClosed(final IoSession session) throws Exception {
-			minusCount();
-			
 			LOG.info("Disconnected - {}", getSlave(session));	// session will be recycled by Mina Server, remove it from memory during 'dispatch()'
 			
 			unregister(session);

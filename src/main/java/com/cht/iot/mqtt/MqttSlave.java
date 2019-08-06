@@ -3,26 +3,24 @@ package com.cht.iot.mqtt;
 import java.nio.ByteBuffer;
 import java.util.HashSet;
 import java.util.Set;
-import java.util.concurrent.BlockingQueue;
-import java.util.concurrent.LinkedBlockingQueue;
 
 import org.apache.mina.core.session.IoSession;
 
 import com.cht.iot.mqtt.protocol.PacketBuilder;
 
 public class MqttSlave {
-	final String uid; // session id
 	final IoSession session;
+	
+	final String uid; // session id	
 	final String connection;
 	final long birthday;
 	
 	Account account;
 	String clientId;
 	
-	Set<String> topics = new HashSet<>();
+	Set<String> topics = new HashSet<>(); // subscription topics
 	
 	final PacketBuilder builder;	
-	BlockingQueue<Payload> payloads = new LinkedBlockingQueue<Payload>();
 	
 	public MqttSlave(IoSession session, int packetBufferInitialSize) {
 		this.session = session;
@@ -70,11 +68,9 @@ public class MqttSlave {
 	
 	public PacketBuilder getPacketBuilder() {
 		return builder;
-	}	
+	}
 	
-	public BlockingQueue<Payload> getPayloads() {
-		return payloads;
-	}	
+	// ======	
 	
 	public void close() {
 		session.closeOnFlush();
@@ -100,15 +96,5 @@ public class MqttSlave {
 				((account != null) && (account.getUsername() != null))? account.getUsername() : "",
 				(clientId != null)? clientId : "",
 				connection);
-	}
-	
-	public static class Payload {
-		public final String topic;
-		public final byte[] payload;
-		
-		public Payload(String topic, byte[] payload) {
-			this.topic = topic;
-			this.payload = payload;
-		}
-	}
+	}	
 }
