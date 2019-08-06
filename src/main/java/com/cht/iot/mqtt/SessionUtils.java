@@ -6,14 +6,16 @@ import org.apache.mina.core.session.IoSession;
 
 public class SessionUtils {
 		
-	public static final IoSession setup(IoSession session) {
+	public static final boolean setup(IoSession session) {
 		InetSocketAddress isa = (InetSocketAddress) session.getRemoteAddress();
 		if (isa != null) {
 			String from = String.format("%s:%d", isa.getAddress().getHostAddress(), isa.getPort());				
 			session.setAttribute("from", from);
+			
+			return true;
 		}
 		
-		return session;
+		return false;
 	}
 	
 	public static final String toString(IoSession session) {

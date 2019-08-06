@@ -504,9 +504,25 @@ public class MyBrokerImpl implements MyBroker {
 	
 	class ServerHandler extends IoHandlerAdapter {
 		
+		int count = 0;
+		
+		synchronized void plusCount() {
+			count += 1;
+		}
+		
+		synchronized void minusCount() {
+			count -= 1;
+		}
+		
 		@Override
 		public void sessionOpened(IoSession session) throws Exception {
-			SessionUtils.setup(session);
+			plusCount();
+			
+			if (SessionUtils.setup(session) == false) {
+				LOG.error("Don't accept the broken session");				
+				session.closeNow();
+				return;
+			}
 			
 			SocketSessionConfig cfg = (SocketSessionConfig) session.getConfig();
 			cfg.setReaderIdleTime(authenticationTimeout);
@@ -515,13 +531,10 @@ public class MyBrokerImpl implements MyBroker {
 			MqttSlave slave = register(session); // every session must has 'from' and 'slave'
 			
 			LOG.info("Connected - {}", slave.getConnection());
-			LOG.info(String.format("sessions: %,d, topics: %,d, core: %,d, active: %,d, free: %,d bytes",
-					acceptor.getManagedSessionCount(),
-					rooms.size(),
-					executor.getCorePoolSize(),
-					executor.getActiveCount(),
-					Runtime.getRuntime().freeMemory()
-					));
+			LOG.info(String.format("free: %,d bytes", Runtime.getRuntime().freeMemory()));
+			LOG.info(String.format("topics: %,d", rooms.size()));
+			LOG.info(String.format("active: %,d", executor.getActiveCount()));
+			LOG.info(String.format("sessions: %,d", count));
 		}
 		
 		@Override
@@ -559,6 +572,8 @@ public class MyBrokerImpl implements MyBroker {
 		
 		@Override
 		public void sessionClosed(final IoSession session) throws Exception {
+			minusCount();
+			
 			LOG.info("Disconnected - {}", getSlave(session));	// session will be recycled by Mina Server, remove it from memory during 'dispatch()'
 			
 			unregister(session);
