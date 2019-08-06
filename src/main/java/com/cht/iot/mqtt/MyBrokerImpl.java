@@ -69,21 +69,11 @@ public class MyBrokerImpl implements MyBroker {
 	int idleTimeout = 90; // idle timeout in seconds
 	int packetBufferInitialSize = 1000;
 	
-	Listener listener = new Listener() {
-		@Override
-		public boolean challenge(MqttSlave slave, String username, String password) {
-			return true;
-		}
-		
-		@Override
+	Listener listener = new Listener() {		
+		public boolean challenge(MqttSlave slave, String username, String password) { return true; }		
 		public void onSlaveArrived(MqttSlave slave) {}
-		
-		@Override
-		public void onSlaveExited(MqttSlave slave) {}
-		
-		public void onSubscribe(MqttSlave slave, String topic) {};
-		
-		@Override
+		public void onSlaveExited(MqttSlave slave) {}		
+		public void onSubscribe(MqttSlave slave, String topic) {};		
 		public void onMessage(MqttSlave slave, String topic, byte[] payload) {};
 	};
 	
