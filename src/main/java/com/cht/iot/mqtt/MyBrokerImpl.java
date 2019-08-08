@@ -274,10 +274,12 @@ public class MyBrokerImpl implements MyBroker {
 		}		
 	}
 	
-	void write(final IoSession session, final ByteBuffer[] buffers) {
+	void write(final IoSession session, MqttSlave slave, final ByteBuffer[] buffers) {
 		try {
-			for (ByteBuffer buffer : buffers) {							
-				session.write(buffer.slice()); // send the message
+			synchronized (slave) {			
+				for (ByteBuffer buffer : buffers) {							
+					session.write(buffer.slice()); // send the message
+				}
 			}
 			
 		} catch (Exception e) {
@@ -285,8 +287,10 @@ public class MyBrokerImpl implements MyBroker {
 		}
 	}
 	
-	void write(final IoSession session, final ByteBuffer buffer) {
-		session.write(buffer);
+	void write(final IoSession session, MqttSlave slave, final ByteBuffer buffer) {
+		synchronized (slave) {
+			session.write(buffer);
+		}
 	}
 	
 	/**
@@ -307,7 +311,13 @@ public class MyBrokerImpl implements MyBroker {
 			
 			for (IoSession subscriber : room.getSubscribers()) { // return the WHOLE NEW subscriber list
 				if (SessionUtils.isOkay(subscriber)) {
-					write(subscriber, buffers);
+					MqttSlave slave = getSlave(subscriber);
+					if (slave == null) {
+						LOG.error("Failed to get MqttSlave from - {}", SessionUtils.toString(subscriber));	
+						continue;
+					}
+					
+					write(subscriber, slave, buffers);
 				}
 			}			
 		}
@@ -394,7 +404,7 @@ public class MyBrokerImpl implements MyBroker {
 					PubackPacket res = new PubackPacket();
 					res.setPacketIdentifier(req.getPacketIdentifier());
 					
-					write(session, res.getByteBuffer());
+					write(session, slave, res.getByteBuffer());
 				}				
 				
 			} else if (pkt instanceof PubackPacket) { // TODO - QoS 2
@@ -412,7 +422,7 @@ public class MyBrokerImpl implements MyBroker {
 					ConnackPacket res = new ConnackPacket();
 					res.setSessionPresent(false);
 					res.setReturnCode(ConnackPacket.ReturnCode.UNAUTHENTICATED);					
-					write(session, res.getByteBuffer());
+					write(session, slave, res.getByteBuffer());
 					
 					throw new PermissionException();
 				}
@@ -425,7 +435,7 @@ public class MyBrokerImpl implements MyBroker {
 				res.setSessionPresent(false);
 				res.setReturnCode(ConnackPacket.ReturnCode.ACCEPTED);
 				
-				write(session, res.getByteBuffer());
+				write(session, slave, res.getByteBuffer());
 				
 				listener.onSlaveArrived(slave); // HINT - could throw the PermissionException here
 					
@@ -444,7 +454,7 @@ public class MyBrokerImpl implements MyBroker {
 				SubackPacket res = new SubackPacket();
 				res.setPacketIdentifier(req.getPacketIdentifier());
 				res.setReturnCode(SubackPacket.ReturnCode.QOS0);				
-				write(session, res.getByteBuffer());
+				write(session, slave, res.getByteBuffer());
 				
 			} else if (pkt instanceof UnsubscribePacket) { // unsubscribe
 				UnsubscribePacket req = (UnsubscribePacket) pkt;
@@ -455,12 +465,12 @@ public class MyBrokerImpl implements MyBroker {
 				
 				UnsubackPacket res = new UnsubackPacket();
 				res.setPacketIdentifier(req.getPacketIdentifier());
-				write(session, res.getByteBuffer());				
+				write(session, slave, res.getByteBuffer());				
 				
 			} else if (pkt instanceof PingreqPacket) { // ping
 				PingrespPacket res = new PingrespPacket();
 				
-				write(session, res.getByteBuffer());
+				write(session, slave, res.getByteBuffer());
 				
 			} else if (pkt instanceof DisconnectPacket) {
 				
@@ -507,7 +517,7 @@ public class MyBrokerImpl implements MyBroker {
 		public void messageReceived(IoSession session, Object message) throws Exception {
 			ByteBuffer bytes = (ByteBuffer) message;
 			try {			
-				handle(session, bytes);				
+				handle(session, bytes);		
 				
 			} catch (IllegalProtocolException e) {
 				LOG.error("Unsupported MQTT packet is from - " + getSlave(session), e);
