@@ -6,8 +6,6 @@ import java.util.Set;
 
 import org.apache.mina.core.session.IoSession;
 
-import com.cht.iot.mqtt.protocol.PacketBuilder;
-
 public class MqttSlave {
 	final IoSession session;
 	
@@ -20,16 +18,12 @@ public class MqttSlave {
 	
 	Set<String> topics = new HashSet<>(); // subscription topics
 	
-	final PacketBuilder builder;	
-	
 	public MqttSlave(IoSession session, int packetBufferInitialSize) {
 		this.session = session;
 		
 		uid = String.format("slave-%d", session.getId());
 		connection = SessionUtils.toString(session);
 		birthday = System.currentTimeMillis();
-		
-		builder = new PacketBuilder(packetBufferInitialSize);
 	}
 	
 	public IoSession getSession() {
@@ -65,12 +59,6 @@ public class MqttSlave {
 	}
 	
 	// ======
-	
-	public PacketBuilder getPacketBuilder() {
-		return builder;
-	}
-	
-	// ======	
 	
 	public void close() {
 		session.closeOnFlush();

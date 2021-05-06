@@ -23,7 +23,6 @@ import org.apache.mina.core.session.IoSession;
 import org.apache.mina.filter.codec.ProtocolCodecFactory;
 import org.apache.mina.filter.codec.ProtocolCodecFilter;
 import org.apache.mina.filter.codec.ProtocolDecoder;
-import org.apache.mina.filter.codec.ProtocolDecoderOutput;
 import org.apache.mina.filter.codec.ProtocolEncoder;
 import org.apache.mina.filter.codec.ProtocolEncoderOutput;
 import org.apache.mina.filter.executor.ExecutorFilter;
@@ -39,7 +38,6 @@ import com.cht.iot.mqtt.protocol.ConnectPacket;
 import com.cht.iot.mqtt.protocol.DisconnectPacket;
 import com.cht.iot.mqtt.protocol.IllegalProtocolException;
 import com.cht.iot.mqtt.protocol.Packet;
-import com.cht.iot.mqtt.protocol.PacketBuilder;
 import com.cht.iot.mqtt.protocol.PingreqPacket;
 import com.cht.iot.mqtt.protocol.PingrespPacket;
 import com.cht.iot.mqtt.protocol.PubackPacket;
@@ -369,114 +367,110 @@ public class MyBrokerImpl implements MyBroker {
 	// ======
 	
 	// receive the packets from client side
-	void handle(IoSession session, ByteBuffer bytes) throws IOException, InterruptedException {
+	void handle(IoSession session, Packet packet) throws IOException, InterruptedException {
 		MqttSlave slave = getSlave(session);
 		if (slave == null) {
 			LOG.error("Failed to get MqttSlave from - {}", SessionUtils.toString(session));			
 			return;
 		}		
 		
-		PacketBuilder builder = slave.getPacketBuilder();
-		List<Packet> packets = builder.build(bytes);
-		handle(session, slave, packets);
+		handle(session, slave, packet);
 	}
 	
 	// handle the MQTT packets
-	void handle(IoSession session, MqttSlave slave, List<Packet> packets) throws IOException, InterruptedException {
-		for (Packet pkt : packets) {
-			if (pkt instanceof PublishPacket) { // publish (notice the issue of memory leak)
-				PublishPacket req = (PublishPacket) pkt;
+	void handle(IoSession session, MqttSlave slave, Packet packet) throws IOException, InterruptedException {
+		if (packet instanceof PublishPacket) { // publish (notice the issue of memory leak)
+			PublishPacket req = (PublishPacket) packet;
+			
+			String topic = req.getTopic();
+			ByteBuffer message = req.getMessage();				
+			
+			// send messages from clients to internal service
+			byte[] bytes = new byte[message.remaining()];
+			message.get(bytes);
+			listener.onMessage(slave, topic, bytes); // HINT - I'll not receive the messages from myself
+							
+			// build the message again
+			message = req.getMessage();
+			publish(topic, message); // publish the message to local subscribers
 				
-				String topic = req.getTopic();
-				ByteBuffer message = req.getMessage();				
+			int qos = req.getQoS();
+			if (qos > 0) {				
+				PubackPacket res = new PubackPacket();
+				res.setPacketIdentifier(req.getPacketIdentifier());
 				
-				// send messages from clients to internal service
-				byte[] bytes = new byte[message.remaining()];
-				message.get(bytes);
-				listener.onMessage(slave, topic, bytes); // HINT - I'll not receive the messages from myself
-								
-				// build the message again
-				message = req.getMessage();
-				publish(topic, message); // publish the message to local subscribers
-					
-				int qos = req.getQoS();
-				if (qos > 0) {				
-					PubackPacket res = new PubackPacket();
-					res.setPacketIdentifier(req.getPacketIdentifier());
-					
-					write(session, slave, res.getByteBuffer());
-				}				
-				
-			} else if (pkt instanceof PubackPacket) { // TODO - QoS 2
-				
-			} else if (pkt instanceof PubcompPacket) { // TODO - QoS 2								
-				
-			} else if (pkt instanceof ConnectPacket) { // connect
-				ConnectPacket req = (ConnectPacket) pkt;
-				
-				Account account = new Account(req.getUsername(), req.getPassword());
-				slave.setAccount(account);
-				slave.setClientId(req.getClientId());
-				
-				if (listener.challenge(slave, req.getUsername(), req.getPassword()) == false) { // no accepted
-					ConnackPacket res = new ConnackPacket();
-					res.setSessionPresent(false);
-					res.setReturnCode(ConnackPacket.ReturnCode.UNAUTHENTICATED);					
-					write(session, slave, res.getByteBuffer());
-					
-					throw new PermissionException();
-				}
-				
-				// assign the reasonable timeout now
-				session.getConfig().setReaderIdleTime(idleTimeout); 
-				session.getConfig().setWriterIdleTime(idleTimeout);
-				
+				write(session, slave, res.getByteBuffer());
+			}				
+			
+		} else if (packet instanceof PubackPacket) { // TODO - QoS 2
+			
+		} else if (packet instanceof PubcompPacket) { // TODO - QoS 2								
+			
+		} else if (packet instanceof ConnectPacket) { // connect
+			ConnectPacket req = (ConnectPacket) packet;
+			
+			Account account = new Account(req.getUsername(), req.getPassword());
+			slave.setAccount(account);
+			slave.setClientId(req.getClientId());
+			
+			if (listener.challenge(slave, req.getUsername(), req.getPassword()) == false) { // no accepted
 				ConnackPacket res = new ConnackPacket();
 				res.setSessionPresent(false);
-				res.setReturnCode(ConnackPacket.ReturnCode.ACCEPTED);
-				
+				res.setReturnCode(ConnackPacket.ReturnCode.UNAUTHENTICATED);					
 				write(session, slave, res.getByteBuffer());
 				
-				listener.onSlaveArrived(slave); // HINT - could throw the PermissionException here
-					
-			} else if (pkt instanceof SubscribePacket) { // subscribe
-				SubscribePacket req = (SubscribePacket) pkt;
-				
-				List<SubscribePacket.Topic> topics = req.getTopics();
-				for (SubscribePacket.Topic topic : topics) {
-					String tf = topic.getTopicFilter();
-					
-					listener.onSubscribe(slave, tf); // HINT - could throw the PermissionException here
-					
-					subscribe(session, slave, tf);
-				}
-					
-				SubackPacket res = new SubackPacket();
-				res.setPacketIdentifier(req.getPacketIdentifier());
-				res.setReturnCode(SubackPacket.ReturnCode.QOS0);				
-				write(session, slave, res.getByteBuffer());
-				
-			} else if (pkt instanceof UnsubscribePacket) { // unsubscribe
-				UnsubscribePacket req = (UnsubscribePacket) pkt;
-				
-				for (String tf : req.getTopicFilters()) {
-					unsubscribe(session, slave, tf);
-				}
-				
-				UnsubackPacket res = new UnsubackPacket();
-				res.setPacketIdentifier(req.getPacketIdentifier());
-				write(session, slave, res.getByteBuffer());				
-				
-			} else if (pkt instanceof PingreqPacket) { // ping
-				PingrespPacket res = new PingrespPacket();
-				
-				write(session, slave, res.getByteBuffer());
-				
-			} else if (pkt instanceof DisconnectPacket) {
-				
-			} else {
-				throw new IllegalProtocolException(pkt.getClass().getSimpleName() + " is not yet supported - " + pkt.getType());
+				throw new PermissionException();
 			}
+			
+			// assign the reasonable timeout now
+			session.getConfig().setReaderIdleTime(idleTimeout); 
+			session.getConfig().setWriterIdleTime(idleTimeout);
+			
+			ConnackPacket res = new ConnackPacket();
+			res.setSessionPresent(false);
+			res.setReturnCode(ConnackPacket.ReturnCode.ACCEPTED);
+			
+			write(session, slave, res.getByteBuffer());
+			
+			listener.onSlaveArrived(slave); // HINT - could throw the PermissionException here
+				
+		} else if (packet instanceof SubscribePacket) { // subscribe
+			SubscribePacket req = (SubscribePacket) packet;
+			
+			List<SubscribePacket.Topic> topics = req.getTopics();
+			for (SubscribePacket.Topic topic : topics) {
+				String tf = topic.getTopicFilter();
+				
+				listener.onSubscribe(slave, tf); // HINT - could throw the PermissionException here
+				
+				subscribe(session, slave, tf);
+			}
+				
+			SubackPacket res = new SubackPacket();
+			res.setPacketIdentifier(req.getPacketIdentifier());
+			res.setReturnCode(SubackPacket.ReturnCode.QOS0);				
+			write(session, slave, res.getByteBuffer());
+			
+		} else if (packet instanceof UnsubscribePacket) { // unsubscribe
+			UnsubscribePacket req = (UnsubscribePacket) packet;
+			
+			for (String tf : req.getTopicFilters()) {
+				unsubscribe(session, slave, tf);
+			}
+			
+			UnsubackPacket res = new UnsubackPacket();
+			res.setPacketIdentifier(req.getPacketIdentifier());
+			write(session, slave, res.getByteBuffer());				
+			
+		} else if (packet instanceof PingreqPacket) { // ping
+			PingrespPacket res = new PingrespPacket();
+			
+			write(session, slave, res.getByteBuffer());
+			
+		} else if (packet instanceof DisconnectPacket) {
+			
+		} else {
+			throw new IllegalProtocolException(packet.getClass().getSimpleName() + " is not yet supported - " + packet.getType());
 		}
 	}
 	
@@ -505,19 +499,13 @@ public class MyBrokerImpl implements MyBroker {
 					executor.getActiveCount(),
 					Runtime.getRuntime().freeMemory()
 					));
-			
-//			LOG.info("Connected - {}", slave.getConnection());
-//			LOG.info(String.format("free: %,d bytes", Runtime.getRuntime().freeMemory()));
-//			LOG.info(String.format("topics: %,d", rooms.size()));
-//			LOG.info(String.format("active: %,d", executor.getActiveCount()));
-//			LOG.info(String.format("sessions: %,d", count));
 		}
 		
 		@Override
 		public void messageReceived(IoSession session, Object message) throws Exception {
-			ByteBuffer bytes = (ByteBuffer) message;
+			Packet pkt = (Packet) message;
 			try {			
-				handle(session, bytes);		
+				handle(session, pkt);		
 				
 			} catch (IllegalProtocolException e) {
 				LOG.error("Unsupported MQTT packet is from - " + getSlave(session), e);
@@ -568,27 +556,9 @@ public class MyBrokerImpl implements MyBroker {
 		}
 	}
 	
-	static class Decoder implements ProtocolDecoder {
-
-		@Override
-		public void decode(IoSession session, IoBuffer in, ProtocolDecoderOutput out) throws Exception {
-			ByteBuffer bb = ByteBuffer.wrap(in.array(), in.position(), in.remaining());
-			in.position(in.limit()); // eat them all
-			out.write(bb);
-		}
-	
-		@Override
-		public void finishDecode(IoSession session, ProtocolDecoderOutput out) throws Exception {
-		}
-	
-		@Override
-		public void dispose(IoSession session) throws Exception {			
-		}		
-	}
-	
 	static class CodecFactory implements ProtocolCodecFactory {
 		final ProtocolEncoder encoder = new Encoder();
-		final ProtocolDecoder decoder = new Decoder();
+		final ProtocolDecoder decoder = new PacketDecoder();
 		
 		@Override
 		public ProtocolEncoder getEncoder(IoSession session) throws Exception {
