@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class PubcompPacket extends Packet {
-	protected int packetIdentifier;
+	int packetIdentifier;
 	
 	public PubcompPacket() {
 		super(Packet.Type.PUBCOMP);
@@ -30,7 +30,7 @@ public class PubcompPacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() {
 		ByteBuffer bytes = ByteBuffer.allocate(2);
 		
 		bytes.putShort((short) packetIdentifier);

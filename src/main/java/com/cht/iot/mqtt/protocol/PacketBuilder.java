@@ -7,6 +7,7 @@ public class PacketBuilder {
 	
 	public Packet build(ByteBuffer bytes) throws IOException {
 		Packet.Type type = Packet.TYPES[(bytes.get(0) & 0x0F0) >> 4];
+		
 		if (type == Packet.Type.PUBLISH) {
 			return new PublishPacket().from(bytes);
 

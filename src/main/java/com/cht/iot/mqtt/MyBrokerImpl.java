@@ -229,7 +229,7 @@ public class MyBrokerImpl implements MyBroker {
 				continue;
 			}
 			
-			room.removeSubscriber(session);
+			room.removeSubscriber(slave);
 			removeTopicRoomIfEmpty(room);
 		}			
 		
@@ -260,10 +260,15 @@ public class MyBrokerImpl implements MyBroker {
 		}		
 	}
 	
-	void write(final IoSession session, MqttSlave slave, final ByteBuffer buffer) {
-		synchronized (slave) {
+	void write(MqttSlave slave, ByteBuffer buffer) {
+		IoSession session = slave.getSession();
+		if (SessionUtils.isOkay(session)) {
 			session.write(buffer);
 		}
+	}
+	
+	void write(MqttSlave slave, Packet packet) throws IOException {
+		write(slave, packet.toByteBuffer());
 	}
 	
 	/**
@@ -282,16 +287,9 @@ public class MyBrokerImpl implements MyBroker {
 
 			ByteBuffer bytes = pkt.toByteBuffer();
 			
-			for (IoSession subscriber : room.getSubscribers()) { // return the WHOLE NEW subscriber list
-				if (SessionUtils.isOkay(subscriber)) {
-					MqttSlave slave = getSlave(subscriber);
-					if (slave == null) {
-						log.error("Failed to get MqttSlave from - {}", SessionUtils.toString(subscriber));	
-						continue;
-					}
-					
-					write(subscriber, slave, bytes.slice());					
-				}
+			for (MqttSlave slave : room.getSubscribers()) { // return the WHOLE NEW subscriber list
+				ByteBuffer copy = bytes.slice();
+				write(slave, copy); // HINT - don't call Packet.toByteBuffer() again
 			}			
 		}
 	}
@@ -305,7 +303,7 @@ public class MyBrokerImpl implements MyBroker {
 	 * @param subscriber
 	 * @throws IOException
 	 */
-	void subscribe(IoSession subscriber, MqttSlave slave, String topic) throws IOException {
+	void subscribe(MqttSlave slave, String topic) throws IOException {
 		TopicRoom room;
 		
 		synchronized (rooms) {
@@ -316,7 +314,7 @@ public class MyBrokerImpl implements MyBroker {
 			}
 		}	
 		
-		room.addSubscriber(subscriber); // FIXME - the 'room' could be removed from 'rooms' by other threads
+		room.addSubscriber(slave); // FIXME - the 'room' could be removed from 'rooms' by other threads
 		
 		slave.getTopics().add(topic);
 	}
@@ -329,10 +327,10 @@ public class MyBrokerImpl implements MyBroker {
 	 * @param topic
 	 * @throws IOException
 	 */	
-	void unsubscribe(IoSession subscriber, MqttSlave slave, String topic) throws IOException {
+	void unsubscribe(MqttSlave slave, String topic) throws IOException {
 		TopicRoom room = rooms.get(topic);
 		if (room != null) {			
-			room.removeSubscriber(subscriber);
+			room.removeSubscriber(slave);
 			removeTopicRoomIfEmpty(room);
 			
 			slave.getTopics().remove(topic);
@@ -349,11 +347,11 @@ public class MyBrokerImpl implements MyBroker {
 			return;
 		}		
 		
-		handle(session, slave, packet);
+		handle(slave, packet);
 	}
 	
 	// handle the MQTT packets
-	void handle(IoSession session, MqttSlave slave, Packet packet) throws IOException, InterruptedException {
+	void handle(MqttSlave slave, Packet packet) throws IOException, InterruptedException {
 		if (packet instanceof PublishPacket) { // publish (notice the issue of memory leak)
 			PublishPacket req = (PublishPacket) packet;
 			
@@ -374,7 +372,7 @@ public class MyBrokerImpl implements MyBroker {
 				PubackPacket res = new PubackPacket();
 				res.setPacketIdentifier(req.getPacketIdentifier());
 				
-				write(session, slave, res.toByteBuffer());
+				write(slave, res);
 			}				
 			
 		} else if (packet instanceof PubackPacket) { // TODO - QoS 2
@@ -392,12 +390,13 @@ public class MyBrokerImpl implements MyBroker {
 				ConnackPacket res = new ConnackPacket();
 				res.setSessionPresent(false);
 				res.setReturnCode(ConnackPacket.ReturnCode.UNAUTHENTICATED);					
-				write(session, slave, res.toByteBuffer());
+				write(slave, res);
 				
 				throw new PermissionException();
 			}
 			
 			// assign the reasonable timeout now
+			IoSession session = slave.getSession();
 			session.getConfig().setReaderIdleTime(idleTimeout); 
 			session.getConfig().setWriterIdleTime(idleTimeout);
 			
@@ -405,7 +404,7 @@ public class MyBrokerImpl implements MyBroker {
 			res.setSessionPresent(false);
 			res.setReturnCode(ConnackPacket.ReturnCode.ACCEPTED);
 			
-			write(session, slave, res.toByteBuffer());
+			write(slave, res);
 			
 			listener.onSlaveArrived(slave); // HINT - could throw the PermissionException here
 				
@@ -418,29 +417,29 @@ public class MyBrokerImpl implements MyBroker {
 				
 				listener.onSubscribe(slave, tf); // HINT - could throw the PermissionException here
 				
-				subscribe(session, slave, tf);
+				subscribe(slave, tf);
 			}
 				
 			SubackPacket res = new SubackPacket();
 			res.setPacketIdentifier(req.getPacketIdentifier());
 			res.setReturnCode(SubackPacket.ReturnCode.QOS0);				
-			write(session, slave, res.toByteBuffer());
+			write(slave, res);
 			
 		} else if (packet instanceof UnsubscribePacket) { // unsubscribe
 			UnsubscribePacket req = (UnsubscribePacket) packet;
 			
 			for (String tf : req.getTopicFilters()) {
-				unsubscribe(session, slave, tf);
+				unsubscribe(slave, tf);
 			}
 			
 			UnsubackPacket res = new UnsubackPacket();
 			res.setPacketIdentifier(req.getPacketIdentifier());
-			write(session, slave, res.toByteBuffer());				
+			write(slave, res);				
 			
 		} else if (packet instanceof PingreqPacket) { // ping
 			PingrespPacket res = new PingrespPacket();
 			
-			write(session, slave, res.toByteBuffer());
+			write(slave, res);
 			
 		} else if (packet instanceof DisconnectPacket) {
 			

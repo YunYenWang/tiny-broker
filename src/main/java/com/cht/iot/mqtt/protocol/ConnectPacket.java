@@ -4,18 +4,18 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class ConnectPacket extends Packet {
-	protected String protocolName; // 'MQTT'
-	protected int protocolLevel; // 4
-	protected int connectionFlags;
-	protected int keepAlive; // in second
+	String protocolName; // 'MQTT'
+	int protocolLevel; // 4
+	int connectionFlags;
+	int keepAlive; // in second
 	
 	// payload
-	protected String clientId;
-	protected String willTopic;
-	protected String willMessage;
+	String clientId;
+	String willTopic;
+	String willMessage;
 	
-	protected String username;
-	protected String password;
+	String username;
+	String password;
 	
 	public ConnectPacket() {
 		super(Packet.Type.CONNECT);
@@ -138,7 +138,7 @@ public class ConnectPacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() throws IOException {
 		ByteBuffer bytes = ByteBuffer.allocate(64);
 		
 		bytes.put(Packet.toStringBytes(protocolName));

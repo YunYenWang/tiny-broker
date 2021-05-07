@@ -4,9 +4,9 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class PublishPacket extends Packet {	
-	protected String topic;
-	protected int packetIdentifier;
-	protected ByteBuffer message;
+	String topic;
+	int packetIdentifier;
+	ByteBuffer message;
 	
 	public PublishPacket() {
 		super(Packet.Type.PUBLISH);
@@ -58,7 +58,7 @@ public class PublishPacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() throws IOException {
+	ByteBuffer body() throws IOException {
 		byte[] tp = Packet.toStringBytes(topic);
 		int qos = getQoS();
 		
@@ -78,8 +78,8 @@ public class PublishPacket extends Packet {
 	// ======
 	
 	public static final class Topic {
-		protected String topicFilter;
-		protected int qos;
+		String topicFilter;
+		int qos;
 		
 		public Topic() {		
 		}

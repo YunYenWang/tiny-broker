@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class UnsubscribePacket extends Packet {
-	protected int packetIdentifier;
-	protected List<String> topicFilters;
+	int packetIdentifier;
+	List<String> topicFilters;
 	
 	public UnsubscribePacket() {
 		super(Packet.Type.UNSUBSCRIBE);
@@ -49,7 +49,7 @@ public class UnsubscribePacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() {
 		throw new UnsupportedOperationException("not yet implemented");
 	}
 }

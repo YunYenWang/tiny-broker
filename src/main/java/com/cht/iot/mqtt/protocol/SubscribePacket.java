@@ -6,8 +6,8 @@ import java.util.ArrayList;
 import java.util.List;
 
 public class SubscribePacket extends Packet {
-	protected int packetIdentifier;
-	protected List<Topic> topics;
+	int packetIdentifier;
+	List<Topic> topics;
 	
 	public SubscribePacket() {
 		super(Packet.Type.SUBSCRIBE);
@@ -52,7 +52,7 @@ public class SubscribePacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() throws IOException {
 		ByteBuffer bytes = ByteBuffer.allocate(128); // FIXME - enough ?
 		
 		bytes.putShort((short) packetIdentifier);
@@ -69,8 +69,8 @@ public class SubscribePacket extends Packet {
 	// ======
 	
 	public static final class Topic {
-		protected String topicFilter;
-		protected int qos;
+		String topicFilter;
+		int qos;
 		
 		public Topic() {		
 		}

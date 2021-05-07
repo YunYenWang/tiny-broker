@@ -21,7 +21,7 @@ public class PacketDecoder extends CumulativeProtocolDecoder {
 		
 		int start = in.position(); // 1 type + maximum 4 bytes remaining length
 		
-		int type = in.get() & 0x0FF;		
+		in.skip(1); // this is type
 		
 		int length = 0;
 		int b = 0;
@@ -44,15 +44,14 @@ public class PacketDecoder extends CumulativeProtocolDecoder {
 			return false; // not enough
 		}
 		
-		int s = in.position() + length; // type + length + body
+		int s = in.position() - start + length; // type + length + body
 		
 		ByteBuffer bb = ByteBuffer.allocate(s);
-		in.position(start);
+		in.position(start); // from the head of the packet
 		
 		for (int i = 0;i < s;i++) {
 			bb.put(in.get());
-		}
-		
+		}		
 		bb.flip();
 		
 		Packet pkt = builder.build(bb);
@@ -61,5 +60,4 @@ public class PacketDecoder extends CumulativeProtocolDecoder {
 
 		return true; // find the next packet
 	}
-
 }

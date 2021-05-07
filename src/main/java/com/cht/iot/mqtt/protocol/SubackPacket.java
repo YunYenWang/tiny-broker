@@ -4,8 +4,8 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class SubackPacket extends Packet {
-	protected int packetIdentifier;
-	protected int returnCode;
+	int packetIdentifier;
+	int returnCode;
 	
 	public SubackPacket() {
 		super(Packet.Type.SUBACK);
@@ -44,7 +44,7 @@ public class SubackPacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() {
 		ByteBuffer bytes = ByteBuffer.allocate(3);
 		
 		bytes.putShort((short) packetIdentifier);
@@ -63,7 +63,7 @@ public class SubackPacket extends Packet {
 		QOS2(0x02),
 		FAILURE(0x80);
 		
-		protected final int code;
+		final int code;
 		
 		ReturnCode(int code) {
 			this.code = code;

@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class UnknownPacket extends Packet {
-	protected byte[] payload;
+	byte[] payload;
 	
 	public UnknownPacket() {
 		super(Packet.Type.RESERVED);
@@ -34,7 +34,7 @@ public class UnknownPacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() {
 		throw new UnsupportedOperationException("not yet implemented");
 	}
 }

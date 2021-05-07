@@ -4,7 +4,7 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 
 public class PubrecPacket extends Packet {
-	protected int packetIdentifier;
+	int packetIdentifier;
 	
 	public PubrecPacket() {
 		super(Packet.Type.PUBREC);
@@ -30,7 +30,7 @@ public class PubrecPacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() {
 		ByteBuffer bytes = ByteBuffer.allocate(2);
 		
 		bytes.putShort((short) packetIdentifier);

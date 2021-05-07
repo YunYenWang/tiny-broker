@@ -79,6 +79,11 @@ public class MqttSlave {
 	}
 	
 	@Override
+	public int hashCode() {		
+		return uid.hashCode();
+	}
+	
+	@Override
 	public String toString() {			
 		return String.format("account: %s, clientId: %s, from: %s",
 				((account != null) && (account.getUsername() != null))? account.getUsername() : "",

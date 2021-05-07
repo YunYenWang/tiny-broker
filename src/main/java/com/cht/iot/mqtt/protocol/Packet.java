@@ -1,6 +1,7 @@
 package com.cht.iot.mqtt.protocol;
 
 import java.io.IOException;
+import java.io.UnsupportedEncodingException;
 import java.nio.ByteBuffer;
 
 public abstract class Packet {
@@ -16,9 +17,9 @@ public abstract class Packet {
 	
 	public static final String UTF8 = "UTF-8";
 	
-	protected int type; // 4 bits
-	protected int flags; // 4 bits
-	protected int length;
+	int type; // 4 bits
+	int flags; // 4 bits
+	int length;
 	
 	public Packet(int type) {
 		this.type = type;
@@ -83,7 +84,7 @@ public abstract class Packet {
 		return this;
 	}
 	
-	protected abstract ByteBuffer body() throws IOException;
+	abstract ByteBuffer body() throws IOException;
 	
 	public final ByteBuffer toByteBuffer() throws IOException {
 		ByteBuffer body = body();
@@ -109,7 +110,7 @@ public abstract class Packet {
 			int b = length % 128;
 			length = length / 128;
 			if (length > 0) {
-				b = b | 128;
+				b = b | 0x080;
 			}
 			
 			bytes.put((byte) b);
@@ -127,10 +128,10 @@ public abstract class Packet {
 		int b = 0;
 		do {
 			b = bytes.get() & 0x0FF;
-			v += ((b & 127) * m);
-			m *= 128;
+			v += ((b & 0x07F) * m);
+			m *= 0x080;
 			
-		} while ((b & 128) != 0);
+		} while ((b & 0x080) != 0);
 		
 		return v;
 	}	
@@ -151,8 +152,8 @@ public abstract class Packet {
 		bytes.put(d);
 	}
 	
-	public static final byte[] toStringBytes(String string) {
-		byte[] d = string.getBytes();
+	public static final byte[] toStringBytes(String string) throws UnsupportedEncodingException {
+		byte[] d = string.getBytes(UTF8);
 		byte[] bytes = new byte[2 + d.length];
 		
 		bytes[0] = (byte) ((d.length & 0x0FF00) >> 8);
@@ -173,7 +174,7 @@ public abstract class Packet {
 		PINGREQ(12), PINGRESP(13),
 		DISCONNECT(14);
 		
-		protected final int id;
+		final int id;
 		
 		private Type(int id) {
 			this.id = id;

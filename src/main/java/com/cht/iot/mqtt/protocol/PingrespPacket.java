@@ -11,7 +11,7 @@ public class PingrespPacket extends Packet {
 	// ======	
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() {
 		ByteBuffer bytes = ByteBuffer.allocate(0);
 		
 		return bytes;

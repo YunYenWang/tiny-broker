@@ -19,7 +19,7 @@ public class PingreqPacket extends Packet {
 	}
 	
 	@Override
-	protected ByteBuffer body() {
+	ByteBuffer body() {
 		throw new UnsupportedOperationException("not yet implemented");
 	}
 }
