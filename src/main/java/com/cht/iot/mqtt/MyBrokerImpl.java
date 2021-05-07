@@ -1,5 +1,6 @@
 package com.cht.iot.mqtt;
 
+import java.io.Closeable;
 import java.io.IOException;
 import java.net.InetSocketAddress;
 import java.nio.ByteBuffer;
@@ -48,7 +49,7 @@ import com.cht.iot.mqtt.protocol.UnsubscribePacket;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class MyBrokerImpl implements MyBroker {
+public class MyBrokerImpl implements MyBroker, Closeable {
 	int executorCorePoolSize = 100;
 	int executorMaxPoolSize = 1000;
 	int executorKeepAliveTime = 60;
@@ -182,6 +183,11 @@ public class MyBrokerImpl implements MyBroker {
 		executor.shutdown();
 	}
 		
+	@Override
+	public void close() throws IOException {
+		stop();		
+	}
+	
 	// ======
 	
 	/**
@@ -466,7 +472,7 @@ public class MyBrokerImpl implements MyBroker {
 			
 			MqttSlave slave = register(session); // every session must has 'from' and 'slave'
 
-			log.info(String.format("Connected - %s, sessions: %,d, topics: %,d, active: %,d, free: %,d bytes",
+			log.info(String.format("Connected - %s (perf - sessions: %,d, topics: %,d, executors: %,d, free: %,d bytes)",
 					slave.getConnection(),
 					acceptor.getManagedSessionCount(),
 					rooms.size(),

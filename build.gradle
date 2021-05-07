@@ -26,6 +26,14 @@ dependencies {
   implementation 'org.springframework.boot:spring-boot-starter'
   
   implementation 'org.apache.mina:mina-core:2.1.4'
+  
+  testImplementation 'org.eclipse.paho:org.eclipse.paho.client.mqttv3:1.2.5'  
   	
-  testImplementation 'org.springframework.boot:spring-boot-starter-test'
+  testImplementation('org.springframework.boot:spring-boot-starter-test') {
+    exclude group: 'org.junit.vintage', module: 'junit-vintage-engine'
+  }
+}
+
+test {
+  useJUnitPlatform()
 }

@@ -47,7 +47,7 @@ public class PacketDecoder extends CumulativeProtocolDecoder {
 		int s = in.position() - start + length; // type + length + body
 		
 		ByteBuffer bb = ByteBuffer.allocate(s);
-		in.position(start); // from the head of the packet
+		in.position(start); // from the head of packet
 		
 		for (int i = 0;i < s;i++) {
 			bb.put(in.get());
