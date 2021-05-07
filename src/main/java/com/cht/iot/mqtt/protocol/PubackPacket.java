@@ -33,7 +33,7 @@ public class PubackPacket extends Packet {
 	protected ByteBuffer body() {
 		ByteBuffer bytes = ByteBuffer.allocate(2);
 		
-		bytes.putShort((short) this.packetIdentifier);
+		bytes.putShort((short) packetIdentifier);
 		
 		bytes.flip();
 		

@@ -86,23 +86,23 @@ public class ConnectPacket extends Packet {
 	}
 	
 	public boolean hasUsername() {
-		return (this.connectionFlags & 0x0080) != 0;
+		return (connectionFlags & 0x0080) != 0;
 	}
 	
 	public boolean hasPassword() {
-		return (this.connectionFlags & 0x0040) != 0;
+		return (connectionFlags & 0x0040) != 0;
 	}
 	
 	public boolean hasWillRetain() {
-		return (this.connectionFlags & 0x0020) != 0;
+		return (connectionFlags & 0x0020) != 0;
 	}
 	
 	public int getWillQos() {
-		return (this.connectionFlags & 0x0018) >> 3;
+		return (connectionFlags & 0x0018) >> 3;
 	}
 	
 	public boolean hasCleanSession() {
-		return (this.connectionFlags & 0x0002) != 0;
+		return (connectionFlags & 0x0002) != 0;
 	}
 	
 	// ======
@@ -111,27 +111,27 @@ public class ConnectPacket extends Packet {
 	public Packet from(ByteBuffer bytes) throws IOException {
 		super.from(bytes);
 		
-		this.protocolName = Packet.readString(bytes);
+		protocolName = Packet.readString(bytes);
 		
-		this.protocolLevel = bytes.get() & 0x00FF;
+		protocolLevel = bytes.get() & 0x00FF;
 		
-		this.connectionFlags = bytes.get() & 0x00FF;
+		connectionFlags = bytes.get() & 0x00FF;
 		
-		this.keepAlive = bytes.getShort();
+		keepAlive = bytes.getShort();
 		
-		this.clientId = Packet.readString(bytes);
+		clientId = Packet.readString(bytes);
 		
-		if (this.hasWillRetain()) {
-			this.willTopic = Packet.readString(bytes);
-			this.willMessage = Packet.readString(bytes);
+		if (hasWillRetain()) {
+			willTopic = Packet.readString(bytes);
+			willMessage = Packet.readString(bytes);
 		}
 		
-		if (this.hasUsername()) {
-			this.username = Packet.readString(bytes);
+		if (hasUsername()) {
+			username = Packet.readString(bytes);
 		}
 		
-		if (this.hasPassword()) {
-			this.password = Packet.readString(bytes);
+		if (hasPassword()) {
+			password = Packet.readString(bytes);
 		}
 		
 		return this;
@@ -141,29 +141,27 @@ public class ConnectPacket extends Packet {
 	protected ByteBuffer body() {
 		ByteBuffer bytes = ByteBuffer.allocate(64);
 		
-		bytes.put(Packet.toStringBytes(this.protocolName));
-		bytes.put((byte) this.protocolLevel);
-		bytes.put((byte) this.connectionFlags);
-		bytes.putShort((short) this.keepAlive);
-		bytes.put(Packet.toStringBytes(this.clientId));
+		bytes.put(Packet.toStringBytes(protocolName));
+		bytes.put((byte) protocolLevel);
+		bytes.put((byte) connectionFlags);
+		bytes.putShort((short) keepAlive);
+		bytes.put(Packet.toStringBytes(clientId));
 		
-		if (this.hasWillRetain()) {
-			bytes.put(Packet.toStringBytes(this.willTopic));
-			bytes.put(Packet.toStringBytes(this.willMessage));
+		if (hasWillRetain()) {
+			bytes.put(Packet.toStringBytes(willTopic));
+			bytes.put(Packet.toStringBytes(willMessage));
 		}
 		
-		if (this.hasUsername()) {
-			bytes.put(Packet.toStringBytes(this.username));
+		if (hasUsername()) {
+			bytes.put(Packet.toStringBytes(username));
 		}
 		
-		if (this.hasPassword()) {
-			bytes.put(Packet.toStringBytes(this.password));
+		if (hasPassword()) {
+			bytes.put(Packet.toStringBytes(password));
 		}
 		
 		bytes.flip();
 		
 		return bytes;
-		
-//		throw new UnsupportedOperationException("not yet implemented");
 	}
 }

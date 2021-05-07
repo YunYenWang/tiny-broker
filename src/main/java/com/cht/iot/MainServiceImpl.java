@@ -3,20 +3,18 @@ package com.cht.iot;
 import javax.annotation.PostConstruct;
 import javax.annotation.PreDestroy;
 
-import org.apache.mina.core.service.IoAcceptor;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
-import com.cht.iot.mqtt.MqttSlave;
 import com.cht.iot.mqtt.MyBroker;
 import com.cht.iot.mqtt.MyBrokerImpl;
 
+import lombok.extern.slf4j.Slf4j;
+
 @Service
+@Slf4j
 public class MainServiceImpl {
-	static final Logger LOG = LoggerFactory.getLogger(MainServiceImpl.class);
 
 	@Value("${broker.executor-core-pool-size:100}")
 	int executorCorePoolSize;
@@ -49,11 +47,11 @@ public class MainServiceImpl {
 		broker.setIdleTimeout(idleTimeout);
 		
 		if (listener != null) {
-			LOG.info("Set Listener - {}", listener);			
+			log.info("Set Listener - {}", listener);			
 			broker.setListener(listener);
 		}
 		
-		LOG.info("ExecutorCorePoolSize: {}, ExecutorMaxPoolSize: {}, IdleTimeout: {}s", executorCorePoolSize, executorMaxPoolSize, idleTimeout);
+		log.info("ExecutorCorePoolSize: {}, ExecutorMaxPoolSize: {}, IdleTimeout: {}s", executorCorePoolSize, executorMaxPoolSize, idleTimeout);
 		
 		broker.start();
 	}

@@ -18,7 +18,7 @@ public class MqttSlave {
 	
 	Set<String> topics = new HashSet<>(); // subscription topics
 	
-	public MqttSlave(IoSession session, int packetBufferInitialSize) {
+	public MqttSlave(IoSession session) {
 		this.session = session;
 		
 		uid = String.format("slave-%d", session.getId());

@@ -11,7 +11,7 @@ public class SubscribePacket extends Packet {
 	
 	public SubscribePacket() {
 		super(Packet.Type.SUBSCRIBE);
-		this.setFlags(0x02);
+		setFlags(0x02);
 	}
 	
 	public int getPacketIdentifier() {
@@ -36,16 +36,16 @@ public class SubscribePacket extends Packet {
 	public Packet from(ByteBuffer bytes) throws IOException {
 		super.from(bytes);
 		
-		this.packetIdentifier = bytes.getShort();
+		packetIdentifier = bytes.getShort();
 		
-		this.topics = new ArrayList<Topic>();
+		topics = new ArrayList<Topic>();
 		
 		while (bytes.hasRemaining()) {
 			String topicFilter = Packet.readString(bytes);
 			int qos = bytes.get();
 			
 			Topic topic = new Topic(topicFilter, qos);
-			this.topics.add(topic);
+			topics.add(topic);
 		}		
 		
 		return this;
@@ -53,10 +53,10 @@ public class SubscribePacket extends Packet {
 	
 	@Override
 	protected ByteBuffer body() {
-		ByteBuffer bytes = ByteBuffer.allocate(128);
+		ByteBuffer bytes = ByteBuffer.allocate(128); // FIXME - enough ?
 		
-		bytes.putShort((short) this.packetIdentifier);
-		for (Topic topic : this.topics) {
+		bytes.putShort((short) packetIdentifier);
+		for (Topic topic : topics) {
 			bytes.put(Packet.toStringBytes(topic.getTopicFilter()));
 			bytes.put((byte) topic.getQos());
 		}

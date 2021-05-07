@@ -51,15 +51,15 @@ public abstract class Packet {
 	}
 	
 	public boolean isDuplicated() {
-		return ((this.flags & 0x08) != 0);
+		return ((flags & 0x08) != 0);
 	}
 	
 	public int getQoS() {
-		return ((this.flags & 0x06) >> 1);
+		return ((flags & 0x06) >> 1);
 	}
 	
 	public boolean isRetain() {
-		return ((this.flags & 0x01) != 0);
+		return ((flags & 0x01) != 0);
 	}
 	
 	public int getLength() {
@@ -72,63 +72,33 @@ public abstract class Packet {
 	
 	// ======
 	
-	public Packet from(ByteBuffer bytes) throws IOException {
+	public Packet from(ByteBuffer bytes) throws IOException { // the sub-class should read the other fields
 		byte h = bytes.get();
 		
-		this.type = (h & 0x0F0) >> 4;
-		this.flags = h & 0x00F;		
+		type = (h & 0x0F0) >> 4;
+		flags = h & 0x00F;		
 		
-		this.length = Packet.readRemainingLength(bytes);
+		length = Packet.readRemainingLength(bytes);
 		
 		return this;
 	}
 	
 	protected abstract ByteBuffer body() throws IOException;
 	
-	protected ByteBuffer[] bodies() throws IOException {
-		return new ByteBuffer[] { this.body() };
-	}
+	public final ByteBuffer toByteBuffer() throws IOException {
+		ByteBuffer body = body();
+		length = body.remaining();
 		
-	public ByteBuffer getByteBuffer() throws IOException {
-		ByteBuffer body = this.body();
-		this.length = body.remaining();
+		ByteBuffer size = Packet.toRemainingLength(length);
+		ByteBuffer bytes = ByteBuffer.allocate(1 + size.remaining() + length);		
 		
-		ByteBuffer size = Packet.toRemainingLength(this.length);
-		ByteBuffer bytes = ByteBuffer.allocate(1 + size.remaining() + this.length);		
-		
-		bytes.put((byte) (((this.type & 0x0FF) << 4) | (this.flags)));
+		bytes.put((byte) (((type & 0x0FF) << 4) | (flags)));
 		bytes.put(size);
 		bytes.put(body);
 		
 		bytes.flip();
 		
 		return bytes;
-	}
-	
-	public ByteBuffer[] getByteBuffers() throws IOException {
-		ByteBuffer[] bodies = this.bodies();
-		this.length = 0;
-		for (ByteBuffer body : bodies) {
-			this.length += body.remaining();
-		}
-		
-		ByteBuffer size = Packet.toRemainingLength(this.length);
-		ByteBuffer head = ByteBuffer.allocate(1 + size.remaining());		
-		
-		head.put((byte) (((this.type & 0x0FF) << 4) | (this.flags)));
-		head.put(size);
-		
-		head.flip();
-		
-		ByteBuffer[] buffers = new ByteBuffer[1 + bodies.length];
-		buffers[0] = head;
-		
-		int s = bodies.length;
-		for (int i = 0;i < s;i++) {
-			buffers[i + 1] = bodies[i];
-		}		
-		
-		return buffers;
 	}
 	
 	// ======

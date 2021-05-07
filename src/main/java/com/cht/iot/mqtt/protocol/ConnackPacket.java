@@ -12,7 +12,7 @@ public class ConnackPacket extends Packet {
 	}
 	
 	public void setSessionPresent(boolean present) {
-		this.acknowledgeFlags |= (present? 1 : 0);
+		acknowledgeFlags |= (present? 1 : 0);
 	}
 	
 	public void setReturnCode(int returnCode) {
@@ -29,8 +29,8 @@ public class ConnackPacket extends Packet {
 	public Packet from(ByteBuffer bytes) throws IOException {	
 		super.from(bytes);
 		
-		this.acknowledgeFlags = bytes.get();
-		this.returnCode = bytes.get();
+		acknowledgeFlags = bytes.get();
+		returnCode = bytes.get();
 		
 		return this;
 	}	
@@ -38,8 +38,8 @@ public class ConnackPacket extends Packet {
 	protected ByteBuffer body() {
 		ByteBuffer bytes = ByteBuffer.allocate(2);
 		
-		bytes.put((byte) this.acknowledgeFlags);
-		bytes.put((byte) this.returnCode);
+		bytes.put((byte) acknowledgeFlags);
+		bytes.put((byte) returnCode);
 		
 		bytes.flip();
 		
@@ -63,7 +63,7 @@ public class ConnackPacket extends Packet {
 		}
 		
 		public int getCode() {
-			return this.code;
+			return code;
 		}
 	}
 }

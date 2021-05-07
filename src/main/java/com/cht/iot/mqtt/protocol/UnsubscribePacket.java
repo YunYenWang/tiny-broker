@@ -11,7 +11,7 @@ public class UnsubscribePacket extends Packet {
 	
 	public UnsubscribePacket() {
 		super(Packet.Type.UNSUBSCRIBE);
-		this.setFlags(0x02);
+		setFlags(0x02);
 	}
 	
 	public int getPacketIdentifier() {
@@ -36,13 +36,13 @@ public class UnsubscribePacket extends Packet {
 	public Packet from(ByteBuffer bytes) throws IOException {
 		super.from(bytes);
 		
-		this.packetIdentifier = bytes.getShort();
+		packetIdentifier = bytes.getShort();
 		
-		this.topicFilters = new ArrayList<String>();
+		topicFilters = new ArrayList<String>();
 		
 		while (bytes.hasRemaining()) {
 			String topicFilter = Packet.readString(bytes);
-			this.topicFilters.add(topicFilter);
+			topicFilters.add(topicFilter);
 		}		
 		
 		return this;

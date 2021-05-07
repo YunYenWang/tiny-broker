@@ -22,9 +22,9 @@ public class UnsubackPacket extends Packet {
 	
 	@Override
 	protected ByteBuffer body() {
-		ByteBuffer bytes = ByteBuffer.allocate(3);
+		ByteBuffer bytes = ByteBuffer.allocate(2);
 		
-		bytes.putShort((short) this.packetIdentifier);
+		bytes.putShort((short) packetIdentifier);
 		
 		bytes.flip();
 		

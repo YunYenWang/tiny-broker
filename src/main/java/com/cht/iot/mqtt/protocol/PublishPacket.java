@@ -46,12 +46,12 @@ public class PublishPacket extends Packet {
 	public Packet from(ByteBuffer bytes) throws IOException {
 		super.from(bytes);
 		
-		this.topic = Packet.readString(bytes);
-		if (this.getQoS() > 0) {
-			this.packetIdentifier = bytes.getShort();
+		topic = Packet.readString(bytes);
+		if (getQoS() > 0) {
+			packetIdentifier = bytes.getShort();
 		}
 		
-		this.message = bytes.slice();
+		message = bytes.slice();
 		bytes.position(bytes.limit()); // eat them all
 		
 		return this;
@@ -59,37 +59,20 @@ public class PublishPacket extends Packet {
 	
 	@Override
 	protected ByteBuffer body() throws IOException {
-		byte[] tp = Packet.toStringBytes(this.topic);
-		int qos = this.getQoS();
+		byte[] tp = Packet.toStringBytes(topic);
+		int qos = getQoS();
 		
-		ByteBuffer bytes = ByteBuffer.allocate(tp.length + ((qos > 0)? 2 : 0) + this.message.remaining());
+		ByteBuffer bytes = ByteBuffer.allocate(tp.length + ((qos > 0)? 2 : 0) + message.remaining());
 		
 		bytes.put(tp);
 		if (qos > 0) {		
-			bytes.putShort((short) this.packetIdentifier);
+			bytes.putShort((short) packetIdentifier);
 		}
-		bytes.put(this.message);
+		bytes.put(message);
 		
 		bytes.flip();
 		
 		return bytes;
-	}
-	
-	@Override
-	protected ByteBuffer[] bodies() throws IOException {
-		byte[] tp = Packet.toStringBytes(this.topic);
-		int qos = this.getQoS();
-		
-		ByteBuffer head = ByteBuffer.allocate(tp.length + ((qos > 0)? 2 : 0));
-		
-		head.put(tp);
-		if (qos > 0) {		
-			head.putShort((short) this.packetIdentifier);
-		}
-		
-		head.flip();
-		
-		return new ByteBuffer[] { head, this.getMessage() };
 	}
 	
 	// ======

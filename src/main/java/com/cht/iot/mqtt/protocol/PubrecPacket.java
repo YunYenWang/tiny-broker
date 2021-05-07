@@ -24,16 +24,16 @@ public class PubrecPacket extends Packet {
 	public Packet from(ByteBuffer bytes) throws IOException {
 		super.from(bytes);
 		
-		this.packetIdentifier = bytes.getShort();
+		packetIdentifier = bytes.getShort();
 		
 		return this;
 	}
 	
 	@Override
 	protected ByteBuffer body() {
-		ByteBuffer bytes = ByteBuffer.allocate(0);
+		ByteBuffer bytes = ByteBuffer.allocate(2);
 		
-		bytes.putShort((short) this.packetIdentifier);
+		bytes.putShort((short) packetIdentifier);
 		
 		bytes.flip();
 		

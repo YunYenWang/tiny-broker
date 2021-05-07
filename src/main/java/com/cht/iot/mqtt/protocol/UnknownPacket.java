@@ -22,13 +22,13 @@ public class UnknownPacket extends Packet {
 	public Packet from(ByteBuffer bytes) throws IOException {
 		byte h = bytes.get();
 		
-		this.type = (h & 0x0F0) >> 4;
-		this.flags = h & 0x00F;		
+		type = (h & 0x0F0) >> 4;
+		flags = h & 0x00F;		
 		
-		this.length = readRemainingLength(bytes);
+		length = readRemainingLength(bytes);
 		
-		this.payload = new byte[bytes.remaining()];
-		bytes.get(this.payload);
+		payload = new byte[bytes.remaining()];
+		bytes.get(payload);
 		
 		return this;
 	}

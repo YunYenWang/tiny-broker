@@ -37,8 +37,8 @@ public class SubackPacket extends Packet {
 	public Packet from(ByteBuffer bytes) throws IOException {
 		super.from(bytes);
 		
-		this.packetIdentifier = bytes.getShort();
-		this.returnCode = bytes.get();
+		packetIdentifier = bytes.getShort();
+		returnCode = bytes.get();
 		
 		return this;
 	}
@@ -47,8 +47,8 @@ public class SubackPacket extends Packet {
 	protected ByteBuffer body() {
 		ByteBuffer bytes = ByteBuffer.allocate(3);
 		
-		bytes.putShort((short) this.packetIdentifier);
-		bytes.put((byte) this.returnCode);
+		bytes.putShort((short) packetIdentifier);
+		bytes.put((byte) returnCode);
 		
 		bytes.flip();
 		
@@ -70,7 +70,7 @@ public class SubackPacket extends Packet {
 		}
 		
 		public int getCode() {
-			return this.code;
+			return code;
 		}
 	}
 }
