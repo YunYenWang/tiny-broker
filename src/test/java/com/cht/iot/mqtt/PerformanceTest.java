@@ -1,5 +1,7 @@
 package com.cht.iot.mqtt;
 
+import java.util.concurrent.CountDownLatch;
+
 import org.eclipse.paho.client.mqttv3.IMqttDeliveryToken;
 import org.eclipse.paho.client.mqttv3.MqttCallback;
 import org.eclipse.paho.client.mqttv3.MqttClient;
@@ -13,9 +15,16 @@ import org.junit.jupiter.api.Test;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class MqttBrokerTest {	
-	
+public class PerformanceTest {	
+
 	String serverURI = "tcp://localhost:1883";
+
+	int clients = 100;
+	int messages = 1000;
+	
+	byte[] message = new byte[1024];	
+	
+	CountDownLatch latch;
 	
 	@Test
 	void test() throws Exception {
@@ -40,13 +49,10 @@ public class MqttBrokerTest {
 	
 				@Override
 				public void onSubscribe(MqttSlave slave, String topic) {
-					log.info("[SERVER] '{}' is subscribed by {}", topic, slave.getConnection());
 				}
 	
 				@Override
 				public void onMessage(MqttSlave slave, String topic, byte[] payload) {
-					log.info("[SERVER] got the message from {} : {}", slave.getConnection(), new String(payload));// message from client
-					
 				}
 				
 			});
@@ -54,19 +60,31 @@ public class MqttBrokerTest {
 			
 			String topic = "test";
 			
-			try (MqttClient client = newMqttClient()) {
+			for (int i = 0;i < clients;i++) {
+				MqttClient client = newMqttClient();
 				client.subscribe(topic);
-				
-				client.publish(topic, new MqttMessage("Hello".getBytes()));
-				
-				client.disconnect();
 			}
 			
-			Thread.sleep(1_000L);
+			int count = clients * messages;
+			
+			latch = new CountDownLatch(count);
+			
+			long ctm = System.currentTimeMillis();
+			
+			MqttClient client = newMqttClient();
+			for (int i = 0;i < messages;i++) {
+				client.publish(topic, new MqttMessage(message));
+			}
+			
+			latch.await();
+			
+			long elapse = System.currentTimeMillis() - ctm;
+			
+			log.info("elapse: {} ms, rate: {} messages / second", elapse, count * 1000 / elapse);			
 		}
 	}
 	
-	MqttClient newMqttClient() throws MqttException {		
+	MqttClient newMqttClient() throws MqttException {
 		String clientId = MqttClient.generateClientId();
 		MqttClientPersistence persistence = new MemoryPersistence();
 		
@@ -75,7 +93,7 @@ public class MqttBrokerTest {
 			
 			@Override
 			public void messageArrived(String topic, MqttMessage message) throws Exception {
-				log.info("[CLIENT] got the message from SERVER: {}", new String(message.getPayload()));
+				latch.countDown();
 			}
 			
 			@Override
